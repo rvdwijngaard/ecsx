@@ -1,0 +1,340 @@
+package ui
+
+import (
+	"fmt"
+	"image/color"
+	"strings"
+	"time"
+
+	"charm.land/lipgloss/v2"
+
+	ecsaws "github.com/ron/ecsx/internal/aws"
+)
+
+func (m *Model) breadcrumb() string {
+	parts := []string{"clusters"}
+	if m.clusterName != "" {
+		parts = append(parts, m.clusterName)
+	}
+	if m.serviceName != "" {
+		parts = append(parts, m.serviceName)
+	}
+	if m.showEnvVars {
+		parts = append(parts, "env")
+	}
+	if m.level == viewLogs {
+		parts = append(parts, "logs")
+	}
+	if m.level == viewEC2Instances {
+		parts = append(parts, "ec2")
+	}
+	return breadcrumbStyle.Render(strings.Join(parts, " › "))
+}
+
+func (m *Model) updateDetail() {
+	if m.scaling {
+		sel := m.list.SelectedItem()
+		if sel == nil {
+			return
+		}
+		svc := sel.(serviceItem).service
+		if svc == nil {
+			return
+		}
+		m.detail.SetContent(fmt.Sprintf(
+			"%s\n\n  Current desired count: %d\n\n  New desired count: %s\n\n  %s",
+			titleStyle.Render("Scale "+svc.Name),
+			svc.DesiredCount,
+			m.scaleInput.View(),
+			helpStyle.Render("enter confirm • esc cancel"),
+		))
+		return
+	}
+	if m.showEnvVars && m.envVars != nil {
+		m.renderEnvVars()
+		return
+	}
+	sel := m.list.SelectedItem()
+	if sel == nil {
+		if m.level == viewLogs {
+			m.renderLogs()
+			return
+		}
+		m.detail.SetContent("  No items")
+		return
+	}
+	switch m.level {
+	case viewClusters:
+		m.renderClusterDetail(sel.(clusterItem).cluster)
+	case viewServices:
+		si := sel.(serviceItem)
+		if si.service == nil {
+			m.detail.SetContent(fmt.Sprintf("%s\n\n  %s", titleStyle.Render(si.name), helpStyle.Render("Loading details...")))
+		} else {
+			m.renderServiceDetail(*si.service)
+		}
+	case viewTasks:
+		m.renderTaskDetail(sel.(taskItem).task)
+	case viewEC2Instances:
+		m.renderEC2Detail(sel.(ec2Item).instance)
+	case viewLogs:
+		m.renderLogs()
+	}
+}
+
+func (m *Model) renderClusterDetail(c ecsaws.Cluster) {
+	region := m.client.Region()
+	link := fmt.Sprintf("https://%s.console.aws.amazon.com/ecs/home?region=%s#/clusters/%s", region, region, c.Name)
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n\n", titleStyle.Render(c.Name))
+	kv(&b, "Status", c.Status)
+	kv(&b, "Container Instances", fmt.Sprintf("%d", c.ContainerInstances))
+	kv(&b, "Active Services", fmt.Sprintf("%d", c.ActiveServices))
+	kv(&b, "Running Tasks", fmt.Sprintf("%d", c.RunningTasks))
+	kv(&b, "Pending Tasks", fmt.Sprintf("%d", c.PendingTasks))
+	m.writeLink(&b, "Console:", link)
+	m.detail.SetContent(b.String())
+}
+
+func (m *Model) renderServiceDetail(s ecsaws.Service) {
+	region := m.client.Region()
+	link := fmt.Sprintf("https://%s.console.aws.amazon.com/ecs/home?region=%s#/clusters/%s/services/%s/tasks",
+		region, region, m.clusterName, s.Name)
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n\n", titleStyle.Render(s.Name))
+	kv(&b, "Status", s.Status)
+	kv(&b, "Launch Type", s.LaunchType)
+	kv(&b, "Task Definition", s.TaskDefinition)
+	kv(&b, "Desired Count", fmt.Sprintf("%d", s.DesiredCount))
+	kv(&b, "Running Count", fmt.Sprintf("%d", s.RunningCount))
+	kv(&b, "Pending Count", fmt.Sprintf("%d", s.PendingCount))
+
+	if s.CreatedAt != nil {
+		kv(&b, "Created At", s.CreatedAt.Local().Format("2006-01-02 15:04:05"))
+	}
+
+	if metrics, ok := m.metricsMap[s.Name]; ok && metrics.HasData {
+		fmt.Fprintf(&b, "\n%s\n", titleStyle.Render("Metrics (1h)"))
+		if len(metrics.CPU) > 0 {
+			last := metrics.CPU[len(metrics.CPU)-1]
+			fmt.Fprintf(&b, "  CPU  %s %5.1f%%\n", sparkline(metrics.CPU), last)
+		}
+		if len(metrics.Mem) > 0 {
+			last := metrics.Mem[len(metrics.Mem)-1]
+			fmt.Fprintf(&b, "  Mem  %s %5.1f%%\n", sparkline(metrics.Mem), last)
+		}
+	} else if _, ok := m.metricsMap[s.Name]; !ok {
+		fmt.Fprintf(&b, "\n  %s\n", helpStyle.Render("Loading metrics..."))
+	}
+
+	m.writeLink(&b, "Console:", link)
+	m.detail.SetContent(b.String())
+}
+
+func (m *Model) renderTaskDetail(t ecsaws.Task) {
+	region := m.client.Region()
+	taskLink := fmt.Sprintf("https://%s.console.aws.amazon.com/ecs/home?region=%s#/clusters/%s/tasks/%s",
+		region, region, m.clusterName, t.ID)
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n\n", titleStyle.Render("Task "+t.ID[:min(12, len(t.ID))]))
+	kv(&b, "Task ID", t.ID)
+	kv(&b, "Status", t.Status)
+	kv(&b, "Desired Status", t.DesiredStatus)
+	kv(&b, "Health Status", t.HealthStatus)
+	kv(&b, "Launch Type", t.LaunchType)
+	kv(&b, "Task Definition", t.TaskDefinition)
+	if t.Group != "" {
+		kv(&b, "Group", t.Group)
+	}
+	if t.CPU != "" {
+		kv(&b, "CPU / Memory", t.CPU+" / "+t.Memory)
+	}
+	if t.StartedAt != nil {
+		kv(&b, "Started At", t.StartedAt.Local().Format("2006-01-02 15:04:05"))
+		kv(&b, "Uptime", formatDuration(time.Since(*t.StartedAt)))
+	}
+	if t.CreatedAt != nil {
+		kv(&b, "Created At", t.CreatedAt.Local().Format("2006-01-02 15:04:05"))
+	}
+	if t.StoppedAt != nil {
+		kv(&b, "Stopped At", t.StoppedAt.Local().Format("2006-01-02 15:04:05"))
+	}
+	if t.StoppedReason != "" {
+		kv(&b, "Stopped Reason", t.StoppedReason)
+	}
+
+	if t.LaunchType == "EC2" {
+		if t.EC2InstanceID != "" {
+			kv(&b, "EC2 Instance", t.EC2InstanceID)
+			ec2Link := fmt.Sprintf("https://%s.console.aws.amazon.com/ec2/v2/home?region=%s#Instances:instanceId=%s",
+				region, region, t.EC2InstanceID)
+			m.writeLink(&b, "EC2 Console:", ec2Link)
+		}
+	} else {
+		if t.PrivateIP != "" {
+			kv(&b, "Private IP", t.PrivateIP)
+		}
+		if t.PublicIP != "" {
+			kv(&b, "Public IP", t.PublicIP)
+		}
+	}
+
+	m.writeLink(&b, "Task Console:", taskLink)
+
+	if len(t.Containers) > 0 {
+		fmt.Fprintf(&b, "\n%s\n", titleStyle.Render("Containers"))
+		for _, c := range t.Containers {
+			fmt.Fprintf(&b, "\n  %s\n", lipgloss.NewStyle().Bold(true).Render(c.Name))
+			fmt.Fprintf(&b, "    Status: %s\n", c.Status)
+			if c.HealthStatus != "" && c.HealthStatus != "UNKNOWN" {
+				fmt.Fprintf(&b, "    Health: %s\n", c.HealthStatus)
+			}
+			if c.Image != "" {
+				fmt.Fprintf(&b, "    Image: %s\n", c.Image)
+			}
+			if c.ExitCode != nil {
+				fmt.Fprintf(&b, "    Exit Code: %d\n", *c.ExitCode)
+			}
+			if c.Reason != "" {
+				fmt.Fprintf(&b, "    Reason: %s\n", c.Reason)
+			}
+			for _, nb := range c.NetworkBindings {
+				fmt.Fprintf(&b, "    Port: %d→%d (%s)\n", nb.ContainerPort, nb.HostPort, nb.Protocol)
+			}
+		}
+	}
+	m.detail.SetContent(b.String())
+}
+
+func (m *Model) renderEC2Detail(ci ecsaws.ContainerInstance) {
+	region := m.client.Region()
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n\n", titleStyle.Render(ci.EC2InstanceID))
+	kv(&b, "Status", ci.Status)
+	kv(&b, "Running Tasks", fmt.Sprintf("%d", ci.RunningTasks))
+	kv(&b, "Pending Tasks", fmt.Sprintf("%d", ci.PendingTasks))
+	ec2Link := fmt.Sprintf("https://%s.console.aws.amazon.com/ec2/v2/home?region=%s#Instances:instanceId=%s",
+		region, region, ci.EC2InstanceID)
+	m.writeLink(&b, "EC2 Console:", ec2Link)
+	fmt.Fprintf(&b, "\n  %s\n", helpStyle.Render("Press enter to start SSM session"))
+	m.detail.SetContent(b.String())
+}
+
+func (m *Model) renderEnvVars() {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n", titleStyle.Render("Environment Variables"))
+	for _, cd := range m.envVars {
+		fmt.Fprintf(&b, "\n%s\n", lipgloss.NewStyle().Bold(true).PaddingLeft(1).Render(cd.Name))
+		if len(cd.EnvVars) == 0 {
+			fmt.Fprintf(&b, "  (no environment variables)\n")
+			continue
+		}
+		maxLen := 0
+		for _, ev := range cd.EnvVars {
+			if len(ev.Name) > maxLen {
+				maxLen = len(ev.Name)
+			}
+		}
+		for _, ev := range cd.EnvVars {
+			fmt.Fprintf(&b, "  %-*s  %s\n", maxLen, ev.Name, ev.Value)
+		}
+	}
+	m.detail.SetContent(b.String())
+}
+
+var logStreamColors = []color.Color{
+	lipgloss.Color("69"), lipgloss.Color("212"), lipgloss.Color("114"), lipgloss.Color("208"),
+	lipgloss.Color("39"), lipgloss.Color("168"), lipgloss.Color("156"), lipgloss.Color("203"),
+}
+
+func (m *Model) renderLogs() {
+	var b strings.Builder
+	if m.logFiltering {
+		fmt.Fprintf(&b, "%s  %s\n\n", titleStyle.Render("Filter:"), m.logFilterInput.View())
+	} else if m.logFilter != "" {
+		fmt.Fprintf(&b, "%s %s\n\n", titleStyle.Render("Logs (tailing)"), helpStyle.Render("filter: "+m.logFilter))
+	} else {
+		fmt.Fprintf(&b, "%s\n\n", titleStyle.Render("Logs (tailing)"))
+	}
+	if len(m.logLines) == 0 {
+		fmt.Fprintf(&b, "  %s\n", helpStyle.Render("Waiting for log events..."))
+	} else {
+		streamColorMap := make(map[string]color.Color)
+		colorIdx := 0
+		for _, ev := range m.logLines {
+			if _, ok := streamColorMap[ev.Stream]; !ok {
+				streamColorMap[ev.Stream] = logStreamColors[colorIdx%len(logStreamColors)]
+				colorIdx++
+			}
+			sc := streamColorMap[ev.Stream]
+			ts := lipgloss.NewStyle().Foreground(sc).Render(ev.Timestamp.Local().Format("15:04:05"))
+			fmt.Fprintf(&b, "  %s %s\n", ts, ev.Message)
+		}
+	}
+	m.detail.SetContent(b.String())
+}
+
+func (m *Model) renderHelp() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n\n", titleStyle.Render("Keybindings"))
+	fmt.Fprintf(&b, "  %-16s %s\n", "↑/k", "Move up")
+	fmt.Fprintf(&b, "  %-16s %s\n", "↓/j", "Move down")
+	fmt.Fprintf(&b, "  %-16s %s\n", "enter", "Select / drill down")
+	fmt.Fprintf(&b, "  %-16s %s\n", "esc", "Go back")
+	fmt.Fprintf(&b, "  %-16s %s\n", "/", "Filter list")
+	fmt.Fprintf(&b, "  %-16s %s\n", "e", "Toggle environment variables")
+	fmt.Fprintf(&b, "  %-16s %s\n", "l", "Tail CloudWatch logs")
+	fmt.Fprintf(&b, "  %-16s %s\n", "/ (in logs)", "Filter log lines")
+	fmt.Fprintf(&b, "  %-16s %s\n", "e (in logs)", "Open logs in $EDITOR")
+	fmt.Fprintf(&b, "  %-16s %s\n", "s", "Scale service (set desired count)")
+	fmt.Fprintf(&b, "  %-16s %s\n", "x", "Start SSM session on EC2 instance")
+	fmt.Fprintf(&b, "  %-16s %s\n", "r", "Refresh (purge cache)")
+	fmt.Fprintf(&b, "  %-16s %s\n", "y", "Yank env vars to clipboard")
+	fmt.Fprintf(&b, "  %-16s %s\n", "+/-", "Toggle zoom (fullscreen detail)")
+	fmt.Fprintf(&b, "  %-16s %s\n", "?", "Toggle this help")
+	fmt.Fprintf(&b, "  %-16s %s\n", "q", "Quit")
+	fmt.Fprintf(&b, "\n%s\n\n", titleStyle.Render("Navigation"))
+	fmt.Fprintf(&b, "  Clusters → Services → Tasks\n")
+	fmt.Fprintf(&b, "  Press enter to drill down, esc to go back\n")
+	fmt.Fprintf(&b, "\n%s\n\n", titleStyle.Render("Views"))
+	fmt.Fprintf(&b, "  The right panel shows details for the selected item.\n")
+	fmt.Fprintf(&b, "  Press 'e' on a service or task to view env vars.\n")
+	fmt.Fprintf(&b, "  Console links are shown in the detail panel.\n")
+	return b.String()
+}
+
+func (m Model) helpText() string {
+	parts := []string{"↑↓ navigate", "/ filter"}
+	if m.level == viewClusters {
+		parts = append(parts, "enter select")
+	} else if m.level == viewLogs {
+		parts = append(parts, "esc back", "e editor", "/ filter")
+	} else {
+		parts = append(parts, "enter select", "esc back", "e env vars", "l logs")
+	}
+	if m.level == viewServices {
+		parts = append(parts, "s scale")
+	}
+	if m.showEnvVars {
+		parts = append(parts, "y yank")
+	}
+	if m.level == viewClusters || m.level == viewServices || m.level == viewTasks {
+		parts = append(parts, "x ssm")
+	}
+	parts = append(parts, "r refresh", "+/- zoom", "? help", "q quit")
+	return "  " + strings.Join(parts, " • ")
+}
+
+func kv(b *strings.Builder, key, val string) {
+	label := labelStyle.Render(fmt.Sprintf("  %-22s", key))
+	fmt.Fprintf(b, "%s %s\n", label, val)
+}
+
+func (m *Model) writeLink(b *strings.Builder, label, url string) {
+	maxW := m.detailWidth() - 8
+	if maxW > 0 && len(url) > maxW {
+		url = url[:maxW] + "…"
+	}
+	fmt.Fprintf(b, "\n  %s\n  %s\n", label, url)
+}
