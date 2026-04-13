@@ -183,10 +183,18 @@ func (m Model) confirmScale() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.scaling = false
+	m.confirming = true
+	m.scaleCount = int32(val)
+	m.updateDetail()
+	return m, nil
+}
+
+func (m Model) executeScale() (tea.Model, tea.Cmd) {
+	m.confirming = false
 	m.loading = true
 	cluster := m.clusterName
 	svc := m.scaleSvc
-	count := int32(val)
+	count := m.scaleCount
 	return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
 		err := m.client.UpdateServiceDesiredCount(context.Background(), cluster, svc, count)
 		if err != nil {

@@ -31,8 +31,10 @@ type Model struct {
 	envVars     []ecsaws.ContainerDefinition
 	showHelp    bool
 	scaling     bool
+	confirming  bool
 	scaleInput  textinput.Model
 	scaleSvc    string
+	scaleCount  int32
 	metricsMap  map[string]*ecsaws.ServiceMetrics
 
 	// Log tailing
@@ -164,6 +166,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.scaleInput, cmd = m.scaleInput.Update(msg)
 			m.updateDetail()
 			return m, cmd
+		}
+		if m.confirming {
+			switch msg.String() {
+			case "enter":
+				return m.executeScale()
+			case "esc":
+				m.confirming = false
+				m.updateDetail()
+				return m, nil
+			}
+			return m, nil
 		}
 		if m.logFiltering {
 			switch msg.String() {
@@ -446,7 +459,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if !m.loading && m.err == nil && !m.showHelp && !m.scaling {
+	if !m.loading && m.err == nil && !m.showHelp && !m.scaling && !m.confirming {
 		var prevName string
 		if sel := m.list.SelectedItem(); sel != nil {
 			prevName = sel.FilterValue()

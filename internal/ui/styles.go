@@ -23,4 +23,8 @@ var (
 	errorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("196")).
 			PaddingLeft(2)
+	warnStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("214")).
+			Bold(true).
+			PaddingLeft(1)
 )

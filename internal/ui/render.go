@@ -32,6 +32,25 @@ func (m *Model) breadcrumb() string {
 }
 
 func (m *Model) updateDetail() {
+	if m.confirming {
+		sel := m.list.SelectedItem()
+		if sel == nil {
+			return
+		}
+		svc := sel.(serviceItem).service
+		if svc == nil {
+			return
+		}
+		var b strings.Builder
+		fmt.Fprintf(&b, "%s\n\n", titleStyle.Render("Confirm Scale "+svc.Name))
+		fmt.Fprintf(&b, "  %d → %d tasks\n\n", svc.DesiredCount, m.scaleCount)
+		if m.scaleCount == 0 {
+			fmt.Fprintf(&b, "  %s\n\n", warnStyle.Render("⚠ This will stop all running tasks!"))
+		}
+		fmt.Fprintf(&b, "  %s\n", helpStyle.Render("enter confirm • esc cancel"))
+		m.detail.SetContent(b.String())
+		return
+	}
 	if m.scaling {
 		sel := m.list.SelectedItem()
 		if sel == nil {
