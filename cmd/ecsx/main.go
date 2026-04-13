@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	ecsaws "github.com/ron/ecsx/internal/aws"
+	"github.com/ron/ecsx/internal/debug"
 	ecsexec "github.com/ron/ecsx/internal/exec"
 	"github.com/ron/ecsx/internal/logs"
 	"github.com/ron/ecsx/internal/ssm"
@@ -22,6 +23,7 @@ var (
 	profile string
 	region  string
 	cluster string
+	verbose bool
 )
 
 func main() {
@@ -29,11 +31,18 @@ func main() {
 		Use:     "ecsx",
 		Short:   "ECS terminal UI and log tailer",
 		Version: version,
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			if verbose {
+				debug.Enable()
+			}
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			debug.Log("creating AWS client (profile=%q region=%q)", profile, region)
 			client, err := ecsaws.NewCachedClient(profile, region)
 			if err != nil {
 				return err
 			}
+			debug.Log("AWS client created, starting TUI (cluster=%q)", cluster)
 			p := tea.NewProgram(ui.New(client, cluster))
 			_, err = p.Run()
 			return err
@@ -44,6 +53,7 @@ func main() {
 	root.PersistentFlags().StringVarP(&profile, "profile", "p", "", "AWS profile")
 	root.PersistentFlags().StringVarP(&region, "region", "r", "", "AWS region")
 	root.PersistentFlags().StringVarP(&cluster, "cluster", "c", "", "ECS cluster name")
+	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable debug logging")
 	root.RegisterFlagCompletionFunc("cluster", completeClusters)
 
 	root.AddCommand(logsCmd())
@@ -60,7 +70,7 @@ func main() {
 
 func logsCmd() *cobra.Command {
 	var service, task, filter string
-	var follow, streamName bool
+	var follow, streamName, groupName, timestamp, eventID bool
 	var start, end logs.TimeFlag
 	start.Default(1 * time.Hour)
 
@@ -81,6 +91,9 @@ func logsCmd() *cobra.Command {
 				Filter:     filter,
 				Follow:     follow,
 				StreamName: streamName,
+				GroupName:  groupName,
+				Timestamp:  timestamp,
+				EventID:    eventID,
 				Start:      start.Time(),
 				End:        end.TimePtr(),
 			})
@@ -93,6 +106,9 @@ func logsCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&filter, "filter", "f", "", "CloudWatch filter pattern")
 	cmd.Flags().BoolVarP(&follow, "follow", "F", true, "Follow log output (use --no-follow to dump and exit)")
 	cmd.Flags().BoolVarP(&streamName, "stream-name", "n", false, "Print the log stream name per line")
+	cmd.Flags().BoolVarP(&groupName, "group-name", "g", false, "Print the log group name per line")
+	cmd.Flags().BoolVarP(&timestamp, "timestamp", "T", false, "Print the event timestamp")
+	cmd.Flags().BoolVarP(&eventID, "event-id", "i", false, "Print the event ID")
 	cmd.Flags().VarP(&start, "start", "b", "Start time: duration (2h30m) or datetime (2024-01-15T09:00)")
 	cmd.Flags().VarP(&end, "end", "e", "End time: duration (30m) or datetime (2024-01-15T10:00)")
 	cmd.MarkFlagRequired("service")

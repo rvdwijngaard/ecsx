@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	ecsaws "github.com/ron/ecsx/internal/aws"
@@ -17,6 +18,9 @@ type Options struct {
 	Filter     string
 	Follow     bool
 	StreamName bool
+	GroupName  bool
+	Timestamp  bool
+	EventID    bool
 	Start      time.Time
 	End        *time.Time
 }
@@ -38,7 +42,7 @@ func Tail(ctx context.Context, client ecsaws.ECSClient, opts Options) error {
 			fmt.Fprintf(os.Stderr, "warning: fetching history: %v\n", err)
 		} else {
 			for _, e := range events {
-				printLogEvent(e, opts.StreamName)
+				printLogEvent(e, opts)
 			}
 		}
 	}
@@ -52,15 +56,25 @@ func Tail(ctx context.Context, client ecsaws.ECSClient, opts Options) error {
 		return fmt.Errorf("starting live tail: %w", err)
 	}
 	for event := range ch {
-		printLogEvent(event, opts.StreamName)
+		printLogEvent(event, opts)
 	}
 	return nil
 }
 
-func printLogEvent(e ecsaws.LogEvent, showStream bool) {
-	if showStream {
-		fmt.Printf("\033[90m%s\033[0m \033[36m%s\033[0m %s\n", e.Timestamp.Local().Format("15:04:05.000"), e.Stream, e.Message)
-	} else {
-		fmt.Printf("\033[90m%s\033[0m %s\n", e.Timestamp.Local().Format("15:04:05.000"), e.Message)
+func printLogEvent(e ecsaws.LogEvent, opts Options) {
+	var parts []string
+	if opts.Timestamp {
+		parts = append(parts, fmt.Sprintf("\033[90m%s\033[0m", e.Timestamp.Local().Format("2006-01-02T15:04:05.000")))
 	}
+	if opts.GroupName && e.LogGroup != "" {
+		parts = append(parts, fmt.Sprintf("\033[33m%s\033[0m", e.LogGroup))
+	}
+	if opts.StreamName && e.Stream != "" {
+		parts = append(parts, fmt.Sprintf("\033[36m%s\033[0m", e.Stream))
+	}
+	if opts.EventID && e.EventID != "" {
+		parts = append(parts, fmt.Sprintf("\033[90m%s\033[0m", e.EventID))
+	}
+	parts = append(parts, e.Message)
+	fmt.Println(strings.Join(parts, " "))
 }

@@ -9,6 +9,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+
+	"github.com/ron/ecsx/internal/debug"
 	cw "github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	logstypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
@@ -71,6 +73,7 @@ func NewClient(profile, region string) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading AWS config: %w", err)
 	}
+	debug.Log("AWS config loaded (region=%s)", cfg.Region)
 	return &Client{
 		ecs:     ecs.NewFromConfig(cfg),
 		cw:      cw.NewFromConfig(cfg),
@@ -84,10 +87,12 @@ func (c *Client) Region() string  { return c.region }
 func (c *Client) Profile() string { return c.profile }
 
 func (c *Client) ListClusters(ctx context.Context) ([]Cluster, error) {
+	debug.Log("ListClusters: listing cluster ARNs...")
 	arns, err := c.listAllClusterARNs(ctx)
 	if err != nil {
 		return nil, err
 	}
+	debug.Log("ListClusters: found %d clusters, describing...", len(arns))
 	if len(arns) == 0 {
 		return nil, nil
 	}
@@ -542,6 +547,8 @@ type LogEvent struct {
 	Timestamp time.Time
 	Message   string
 	Stream    string
+	EventID   string
+	LogGroup  string
 }
 
 // TailLogs starts a CloudWatch Live Tail session for the given log group.
@@ -606,6 +613,7 @@ func (c *Client) TailLogs(ctx context.Context, logGroup string, logStreamPrefix 
 							Timestamp: ts,
 							Message:   strings.TrimRight(*r.Message, "\n"),
 							Stream:    *r.LogStreamName,
+							LogGroup:  aws.ToString(r.LogGroupIdentifier),
 						}:
 						case <-ctx.Done():
 							return
@@ -646,6 +654,8 @@ func (c *Client) FetchRecentLogs(ctx context.Context, logGroup string, logStream
 			Timestamp: time.UnixMilli(aws.ToInt64(e.Timestamp)),
 			Message:   strings.TrimRight(aws.ToString(e.Message), "\n"),
 			Stream:    aws.ToString(e.LogStreamName),
+			EventID:   aws.ToString(e.EventId),
+			LogGroup:  logGroup,
 		})
 	}
 	return events, nil
