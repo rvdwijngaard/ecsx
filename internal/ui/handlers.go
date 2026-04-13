@@ -136,6 +136,10 @@ func (m Model) handleRefresh() (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.spinner.Tick, m.loadTasks(m.clusterName, m.serviceName))
 	case viewEC2Instances:
 		return m, tea.Batch(m.spinner.Tick, m.loadContainerInstances(m.clusterName))
+	case viewLogs:
+		m.logFilter = ""
+		m.loading = false
+		return m, m.startLogTail()
 	}
 	return m, nil
 }
