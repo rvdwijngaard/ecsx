@@ -89,6 +89,22 @@ ecsx ssm -c my-cluster -s my-service     # resolve instance from service tasks
 ecsx ssm -c my-cluster -i i-0abc123      # connect directly
 ```
 
+### `ecsx task` — describe a task
+
+```sh
+ecsx task -c my-cluster -s my-service                    # describe first task in service
+ecsx task -c my-cluster -s my-service -t <task-id>       # describe specific task
+```
+
+### `ecsx container-env` — list container environment variables
+
+```sh
+ecsx container-env -c my-cluster -s my-service                          # table format
+ecsx container-env -c my-cluster -s my-service --format export          # export KEY="value"
+ecsx container-env -c my-cluster -s my-service --format docker          # -e KEY=value
+ecsx container-env -c my-cluster -s my-service --container my-container # specific container
+```
+
 ### `ecsx completion` — shell completions
 
 ```sh
