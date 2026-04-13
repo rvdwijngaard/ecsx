@@ -18,6 +18,7 @@ import (
 )
 
 var (
+	version string
 	profile string
 	region  string
 	cluster string
@@ -25,8 +26,9 @@ var (
 
 func main() {
 	root := &cobra.Command{
-		Use:   "ecsx",
-		Short: "ECS terminal UI and log tailer",
+		Use:     "ecsx",
+		Short:   "ECS terminal UI and log tailer",
+		Version: version,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := ecsaws.NewCachedClient(profile, region)
 			if err != nil {
