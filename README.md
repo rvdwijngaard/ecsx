@@ -122,6 +122,14 @@ ecsx completion fish > ~/.config/fish/completions/ecsx.fish
 | `--region`  | `-r`  | AWS region                   |
 | `--cluster` | `-c`  | ECS cluster (skip selection) |
 
+## Inspiration
+
+Built on the shoulders of these great tools:
+
+- [ecsq](https://github.com/mightyguava/ecsq) — friendly ECS CLI for querying clusters, services, and tasks
+- [cw](https://github.com/lucagrulla/cw) — CloudWatch Logs tail from the terminal
+- [gossm](https://github.com/gjbae1212/gossm) — interactive SSM session manager
+
 ## License
 
 MIT

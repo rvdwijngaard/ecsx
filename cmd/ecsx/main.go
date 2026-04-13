@@ -49,6 +49,8 @@ func main() {
 	root.AddCommand(logsCmd())
 	root.AddCommand(ssmCmd())
 	root.AddCommand(execCmd())
+	root.AddCommand(taskCmd())
+	root.AddCommand(containerEnvCmd())
 	root.AddCommand(completionCmd())
 
 	if err := root.Execute(); err != nil {
@@ -171,6 +173,202 @@ func execCmd() *cobra.Command {
 		return client.ListServiceNames(ctx, cluster)
 	}))
 
+	return cmd
+}
+
+func taskCmd() *cobra.Command {
+	var service, task string
+
+	cmd := &cobra.Command{
+		Use:   "task",
+		Short: "Describe a task (or an arbitrary task from a service)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if service == "" && task == "" {
+				return fmt.Errorf("provide --service or --task")
+			}
+			client, err := ecsaws.NewClient(profile, region)
+			if err != nil {
+				return err
+			}
+			ctx := cmd.Context()
+
+			var tasks []ecsaws.Task
+			if service != "" {
+				tasks, err = client.ListTasks(ctx, cluster, service)
+				if err != nil {
+					return err
+				}
+				if task != "" {
+					for _, t := range tasks {
+						if t.ID == task || t.ARN == task {
+							tasks = []ecsaws.Task{t}
+							break
+						}
+					}
+				}
+			}
+			if len(tasks) == 0 {
+				return fmt.Errorf("no tasks found")
+			}
+
+			t := tasks[0]
+			fmt.Printf("Task:            %s\n", t.ID)
+			fmt.Printf("ARN:             %s\n", t.ARN)
+			fmt.Printf("Status:          %s\n", t.Status)
+			fmt.Printf("Desired Status:  %s\n", t.DesiredStatus)
+			fmt.Printf("Health:          %s\n", t.HealthStatus)
+			fmt.Printf("Launch Type:     %s\n", t.LaunchType)
+			fmt.Printf("Task Definition: %s\n", t.TaskDefinition)
+			if t.CPU != "" {
+				fmt.Printf("CPU / Memory:    %s / %s\n", t.CPU, t.Memory)
+			}
+			if t.StartedAt != nil {
+				fmt.Printf("Started At:      %s\n", t.StartedAt.Local().Format(time.RFC3339))
+			}
+			if t.StoppedAt != nil {
+				fmt.Printf("Stopped At:      %s\n", t.StoppedAt.Local().Format(time.RFC3339))
+			}
+			if t.StoppedReason != "" {
+				fmt.Printf("Stopped Reason:  %s\n", t.StoppedReason)
+			}
+			if t.EC2InstanceID != "" {
+				fmt.Printf("EC2 Instance:    %s\n", t.EC2InstanceID)
+			}
+			if t.PrivateIP != "" {
+				fmt.Printf("Private IP:      %s\n", t.PrivateIP)
+			}
+			if t.PublicIP != "" {
+				fmt.Printf("Public IP:       %s\n", t.PublicIP)
+			}
+			for _, c := range t.Containers {
+				fmt.Printf("\nContainer: %s\n", c.Name)
+				fmt.Printf("  Status: %s\n", c.Status)
+				fmt.Printf("  Image:  %s\n", c.Image)
+				if c.HealthStatus != "" && c.HealthStatus != "UNKNOWN" {
+					fmt.Printf("  Health: %s\n", c.HealthStatus)
+				}
+				if c.ExitCode != nil {
+					fmt.Printf("  Exit:   %d\n", *c.ExitCode)
+				}
+			}
+			return nil
+		},
+		SilenceUsage: true,
+	}
+
+	cmd.Flags().StringVarP(&service, "service", "s", "", "ECS service name")
+	cmd.Flags().StringVarP(&task, "task", "t", "", "Task ID or ARN")
+	cmd.MarkPersistentFlagRequired("cluster")
+	cmd.RegisterFlagCompletionFunc("service", completeWith(func(ctx context.Context, client *ecsaws.Client) ([]string, error) {
+		return client.ListServiceNames(ctx, cluster)
+	}))
+	cmd.RegisterFlagCompletionFunc("task", completeWith(func(ctx context.Context, client *ecsaws.Client) ([]string, error) {
+		tasks, err := client.ListTasks(ctx, cluster, service)
+		if err != nil {
+			return nil, err
+		}
+		ids := make([]string, len(tasks))
+		for i, t := range tasks {
+			ids[i] = t.ID
+		}
+		return ids, nil
+	}))
+	return cmd
+}
+
+func containerEnvCmd() *cobra.Command {
+	var service, container, format string
+
+	cmd := &cobra.Command{
+		Use:   "container-env",
+		Short: "List environment variables for a service's containers",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := ecsaws.NewClient(profile, region)
+			if err != nil {
+				return err
+			}
+			ctx := cmd.Context()
+
+			svc, err := client.DescribeService(ctx, cluster, service)
+			if err != nil {
+				return err
+			}
+			defs, err := client.DescribeTaskDefinition(ctx, svc.TaskDefinition)
+			if err != nil {
+				return err
+			}
+
+			for _, cd := range defs {
+				if container != "" && cd.Name != container {
+					continue
+				}
+				switch format {
+				case "export", "shell":
+					for _, ev := range cd.EnvVars {
+						fmt.Printf("export %s=%q\n", ev.Name, ev.Value)
+					}
+				case "docker":
+					for _, ev := range cd.EnvVars {
+						fmt.Printf("-e %s=%s\n", ev.Name, ev.Value)
+					}
+				default: // table
+					if len(defs) > 1 {
+						fmt.Printf("# %s\n", cd.Name)
+					}
+					maxLen := 0
+					for _, ev := range cd.EnvVars {
+						if len(ev.Name) > maxLen {
+							maxLen = len(ev.Name)
+						}
+					}
+					for _, ev := range cd.EnvVars {
+						fmt.Printf("%-*s  %s\n", maxLen, ev.Name, ev.Value)
+					}
+					if len(defs) > 1 {
+						fmt.Println()
+					}
+				}
+			}
+			return nil
+		},
+		SilenceUsage: true,
+	}
+
+	cmd.Flags().StringVarP(&service, "service", "s", "", "ECS service name (required)")
+	cmd.Flags().StringVar(&container, "container", "", "Filter to a specific container")
+	cmd.Flags().StringVar(&format, "format", "table", "Output format: table, export, shell, docker")
+	cmd.MarkFlagRequired("service")
+	cmd.MarkPersistentFlagRequired("cluster")
+	cmd.RegisterFlagCompletionFunc("service", completeWith(func(ctx context.Context, client *ecsaws.Client) ([]string, error) {
+		return client.ListServiceNames(ctx, cluster)
+	}))
+	cmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"table", "export", "shell", "docker"}, cobra.ShellCompDirectiveNoFileComp
+	})
+	cmd.RegisterFlagCompletionFunc("container", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if cluster == "" || service == "" {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		client, err := ecsaws.NewClient(profile, region)
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		svc, err := client.DescribeService(ctx, cluster, service)
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+		defs, err := client.DescribeTaskDefinition(ctx, svc.TaskDefinition)
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+		names := make([]string, len(defs))
+		for i, d := range defs {
+			names[i] = d.Name
+		}
+		return names, cobra.ShellCompDirectiveNoFileComp
+	})
 	return cmd
 }
 
