@@ -53,6 +53,9 @@ type Model struct {
 	err     error
 	width   int
 	height  int
+
+	autoRefresh bool
+	refreshing  bool // background refresh in progress (no spinner, preserve selection)
 }
 
 func New(client ecsaws.ECSClient, cluster string) Model {
@@ -71,14 +74,23 @@ func New(client ecsaws.ECSClient, cluster string) Model {
 		initialCluster: cluster,
 		clusterName:    cluster,
 		metricsMap:     make(map[string]*ecsaws.ServiceMetrics),
+		autoRefresh:    true,
 	}
+}
+
+const autoRefreshInterval = 30 * time.Second
+
+func autoRefreshCmd() tea.Cmd {
+	return tea.Tick(autoRefreshInterval, func(time.Time) tea.Msg {
+		return autoRefreshMsg{}
+	})
 }
 
 func (m Model) Init() tea.Cmd {
 	if m.initialCluster != "" {
-		return tea.Batch(m.spinner.Tick, m.loadServiceNames(m.initialCluster))
+		return tea.Batch(m.spinner.Tick, m.loadServiceNames(m.initialCluster), autoRefreshCmd())
 	}
-	return tea.Batch(m.spinner.Tick, m.loadClusters())
+	return tea.Batch(m.spinner.Tick, m.loadClusters(), autoRefreshCmd())
 }
 
 // Layout helpers
@@ -248,6 +260,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.list.FilterState() != list.Filtering && !m.showHelp {
 				return m.handleRefresh()
 			}
+		case "a":
+			if m.list.FilterState() != list.Filtering && !m.showHelp {
+				m.autoRefresh = !m.autoRefresh
+				return m, nil
+			}
 		case "y":
 			if m.list.FilterState() != list.Filtering && !m.showHelp && m.showEnvVars {
 				return m.handleYank()
@@ -292,14 +309,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case clustersLoadedMsg:
 		m.loading = false
 		m.level = viewClusters
-		m.list.ResetFilter()
+		if !m.refreshing {
+			m.list.ResetFilter()
+		}
+		prevSel := ""
+		if sel := m.list.SelectedItem(); sel != nil {
+			prevSel = sel.FilterValue()
+		}
 		items := make([]list.Item, len(msg.clusters))
 		for i, c := range msg.clusters {
 			items[i] = clusterItem{c}
 		}
 		cmd := m.list.SetItems(items)
 		m.list.Title = "Clusters"
-		m.list.Select(0)
+		if m.refreshing {
+			m.refreshing = false
+			for i, item := range items {
+				if item.FilterValue() == prevSel {
+					m.list.Select(i)
+					break
+				}
+			}
+		} else {
+			m.list.Select(0)
+		}
 		m.updateSizes()
 		m.updateDetail()
 		return m, cmd
@@ -307,19 +340,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case serviceNamesLoadedMsg:
 		m.loading = false
 		m.level = viewServices
-		m.list.ResetFilter()
-		m.metricsMap = make(map[string]*ecsaws.ServiceMetrics)
+		if !m.refreshing {
+			m.list.ResetFilter()
+			m.metricsMap = make(map[string]*ecsaws.ServiceMetrics)
+		}
+		prevSel := ""
+		if sel := m.list.SelectedItem(); sel != nil {
+			prevSel = sel.FilterValue()
+		}
 		items := make([]list.Item, len(msg.names))
 		for i, name := range msg.names {
 			items[i] = serviceItem{name: name}
 		}
 		cmd := m.list.SetItems(items)
 		m.list.Title = fmt.Sprintf("Services (%s)", m.clusterName)
-		m.list.Select(0)
+		if m.refreshing {
+			m.refreshing = false
+			for i, item := range items {
+				if item.FilterValue() == prevSel {
+					m.list.Select(i)
+					break
+				}
+			}
+		} else {
+			m.list.Select(0)
+		}
 		m.updateSizes()
 		m.updateDetail()
 		if len(msg.names) > 0 {
-			return m, tea.Batch(cmd, m.loadServiceDetail(m.clusterName, msg.names[0]))
+			sel := m.list.SelectedItem()
+			if sel != nil {
+				return m, tea.Batch(cmd, m.loadServiceDetail(m.clusterName, sel.FilterValue()))
+			}
 		}
 		return m, cmd
 
@@ -365,14 +417,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tasksLoadedMsg:
 		m.loading = false
 		m.level = viewTasks
-		m.list.ResetFilter()
+		if !m.refreshing {
+			m.list.ResetFilter()
+		}
+		prevSel := ""
+		if sel := m.list.SelectedItem(); sel != nil {
+			prevSel = sel.FilterValue()
+		}
 		items := make([]list.Item, len(msg.tasks))
 		for i, t := range msg.tasks {
 			items[i] = taskItem{t}
 		}
 		cmd := m.list.SetItems(items)
 		m.list.Title = fmt.Sprintf("Tasks (%s)", m.serviceName)
-		m.list.Select(0)
+		if m.refreshing {
+			m.refreshing = false
+			for i, item := range items {
+				if item.FilterValue() == prevSel {
+					m.list.Select(i)
+					break
+				}
+			}
+		} else {
+			m.list.Select(0)
+		}
 		m.updateSizes()
 		m.updateDetail()
 		return m, cmd
@@ -431,14 +499,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.level = viewEC2Instances
-		m.list.ResetFilter()
+		if !m.refreshing {
+			m.list.ResetFilter()
+		}
+		prevSel := ""
+		if sel := m.list.SelectedItem(); sel != nil {
+			prevSel = sel.FilterValue()
+		}
 		items := make([]list.Item, len(msg.instances))
 		for i, inst := range msg.instances {
 			items[i] = ec2Item{inst}
 		}
 		cmd := m.list.SetItems(items)
 		m.list.Title = fmt.Sprintf("EC2 Instances (%s)", m.clusterName)
-		m.list.Select(0)
+		if m.refreshing {
+			m.refreshing = false
+			for i, item := range items {
+				if item.FilterValue() == prevSel {
+					m.list.Select(i)
+					break
+				}
+			}
+		} else {
+			m.list.Select(0)
+		}
 		m.updateSizes()
 		m.updateDetail()
 		return m, cmd
@@ -462,6 +546,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.updateDetail()
 		return m, nil
+
+	case autoRefreshMsg:
+		// Always re-schedule the next tick
+		next := autoRefreshCmd()
+		if !m.autoRefresh || m.loading || m.err != nil || m.scaling || m.confirming || m.showHelp || m.logFiltering || m.list.FilterState() == list.Filtering {
+			return m, next
+		}
+		if cc, ok := m.client.(*ecsaws.CachedClient); ok {
+			cc.Purge()
+		}
+		m.refreshing = true
+		switch m.level {
+		case viewClusters:
+			return m, tea.Batch(next, m.loadClusters())
+		case viewServices:
+			return m, tea.Batch(next, m.loadServiceNames(m.clusterName))
+		case viewTasks:
+			return m, tea.Batch(next, m.loadTasks(m.clusterName, m.serviceName))
+		case viewEC2Instances:
+			return m, tea.Batch(next, m.loadContainerInstances(m.clusterName))
+		}
+		return m, next
 
 	case errMsg:
 		m.loading = false

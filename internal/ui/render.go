@@ -333,6 +333,7 @@ func (m *Model) renderHelp() string {
 	fmt.Fprintf(&b, "  %-16s %s\n", "s", "Scale service (set desired count)")
 	fmt.Fprintf(&b, "  %-16s %s\n", "x", "Action: deploy (services) / stop (tasks) / SSM (clusters)")
 	fmt.Fprintf(&b, "  %-16s %s\n", "r", "Refresh (purge cache)")
+	fmt.Fprintf(&b, "  %-16s %s\n", "a", "Toggle auto-refresh (30s)")
 	fmt.Fprintf(&b, "  %-16s %s\n", "y", "Yank env vars to clipboard")
 	fmt.Fprintf(&b, "  %-16s %s\n", "+/-", "Toggle zoom (fullscreen detail)")
 	fmt.Fprintf(&b, "  %-16s %s\n", "?", "Toggle this help")
@@ -368,7 +369,13 @@ func (m Model) helpText() string {
 	if m.level == viewClusters {
 		parts = append(parts, "x ssm")
 	}
-	parts = append(parts, "r refresh", "+/- zoom", "? help", "q quit")
+	parts = append(parts, "r refresh")
+	if m.autoRefresh {
+		parts = append(parts, "a auto:on")
+	} else {
+		parts = append(parts, "a auto:off")
+	}
+	parts = append(parts, "+/- zoom", "? help", "q quit")
 	return "  " + strings.Join(parts, " • ")
 }
 

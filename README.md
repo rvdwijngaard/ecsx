@@ -26,6 +26,7 @@ open SSM sessions — without leaving your terminal.
 - ⚖️ **Scale** — update desired count on the fly
 - 🔄 **Deploy** — force new deployment to restart services
 - 🛑 **Stop** — stop individual tasks
+- 🔃 **Auto-refresh** — background refresh every 30s, toggle with `a`
 - 🔑 **Env vars** — inspect container environment, copy to clipboard
 - 🐚 **Exec** — shell into running containers via ECS ExecuteCommand
 - 🔌 **SSM** — connect to EC2 container instances
@@ -128,6 +129,7 @@ ecsx completion fish > ~/.config/fish/completions/ecsx.fish
 | `s`     | Scale service                   |
 | `x`     | Deploy / stop task / SSM session |
 | `r`     | Refresh                         |
+| `a`     | Toggle auto-refresh             |
 | `+` `-` | Toggle zoom                     |
 | `?`     | Help                            |
 | `q`     | Quit                            |

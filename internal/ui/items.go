@@ -41,6 +41,7 @@ type logGroupFoundMsg struct {
 	streamPrefix string
 }
 type errMsg struct{ err error }
+type autoRefreshMsg struct{}
 
 // EC2 instance picker
 type ec2InstancesLoadedMsg struct{ instances []ecsaws.ContainerInstance }
