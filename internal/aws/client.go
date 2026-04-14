@@ -45,6 +45,7 @@ type ECSClient interface {
 	GetServiceMetrics(ctx context.Context, cluster, service string) (*ServiceMetrics, error)
 	TailLogs(ctx context.Context, logGroup string, logStreamPrefix string, filterPattern string) (<-chan LogEvent, error)
 	FetchRecentLogs(ctx context.Context, logGroup string, logStreamPrefix string, filterPattern string, start time.Time, end *time.Time) ([]LogEvent, error)
+	ResolveTaskEC2Instances(ctx context.Context, cluster string, tasks []Task) (map[string]string, error)
 }
 
 type ContainerInstance struct {
@@ -343,15 +344,6 @@ func (c *Client) ListTasks(ctx context.Context, cluster, service string) ([]Task
 			tasks = append(tasks, taskFromAPI(t))
 		}
 	}
-	// Resolve EC2 instance IDs for EC2-backed tasks
-	ciMap, err := c.resolveContainerInstances(ctx, cluster, tasks)
-	if err == nil {
-		for i := range tasks {
-			if id, ok := ciMap[tasks[i].ContainerInstanceID]; ok {
-				tasks[i].EC2InstanceID = id
-			}
-		}
-	}
 	return tasks, nil
 }
 
@@ -367,6 +359,10 @@ func (c *Client) listAllTaskARNs(ctx context.Context, cluster, service string) (
 		arns = append(arns, page.TaskArns...)
 	}
 	return arns, nil
+}
+
+func (c *Client) ResolveTaskEC2Instances(ctx context.Context, cluster string, tasks []Task) (map[string]string, error) {
+	return c.resolveContainerInstances(ctx, cluster, tasks)
 }
 
 func (c *Client) resolveContainerInstances(ctx context.Context, cluster string, tasks []Task) (map[string]string, error) {

@@ -258,9 +258,10 @@ func (m Model) handleSSM() (tea.Model, tea.Cmd) {
 			if err != nil {
 				return errMsg{err}
 			}
+			ec2Map, _ := client.ResolveTaskEC2Instances(context.Background(), cluster, tasks)
 			for _, t := range tasks {
-				if t.EC2InstanceID != "" {
-					return ssmTargetMsg{instanceID: t.EC2InstanceID}
+				if id, ok := ec2Map[t.ContainerInstanceID]; ok {
+					return ssmTargetMsg{instanceID: id}
 				}
 			}
 			return errMsg{fmt.Errorf("no EC2-backed tasks found for service %s", svcName)}

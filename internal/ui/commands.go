@@ -95,3 +95,13 @@ func (m Model) loadContainerInstances(cluster string) tea.Cmd {
 		return ec2InstancesLoadedMsg{instances}
 	}
 }
+
+func (m Model) resolveTaskEC2(cluster string, tasks []ecsaws.Task) tea.Cmd {
+	return func() tea.Msg {
+		ec2Map, err := m.client.ResolveTaskEC2Instances(context.Background(), cluster, tasks)
+		if err != nil || ec2Map == nil {
+			return taskEC2ResolvedMsg{}
+		}
+		return taskEC2ResolvedMsg{ec2Map: ec2Map}
+	}
+}

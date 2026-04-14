@@ -37,9 +37,10 @@ func resolveInstance(ctx context.Context, client ecsaws.ECSClient, cluster, serv
 		if err != nil {
 			return "", fmt.Errorf("listing tasks: %w", err)
 		}
+		ec2Map, _ := client.ResolveTaskEC2Instances(ctx, cluster, tasks)
 		for _, t := range tasks {
-			if t.EC2InstanceID != "" {
-				return t.EC2InstanceID, nil
+			if id, ok := ec2Map[t.ContainerInstanceID]; ok {
+				return id, nil
 			}
 		}
 		return "", fmt.Errorf("no EC2-backed tasks found for service %s", service)

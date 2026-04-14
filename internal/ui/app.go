@@ -443,7 +443,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.updateSizes()
 		m.updateDetail()
-		return m, cmd
+		return m, tea.Batch(cmd, m.resolveTaskEC2(m.clusterName, msg.tasks))
+
+	case taskEC2ResolvedMsg:
+		if msg.ec2Map == nil || m.level != viewTasks {
+			return m, nil
+		}
+		items := m.list.Items()
+		for i, item := range items {
+			if ti, ok := item.(taskItem); ok {
+				if id, found := msg.ec2Map[ti.task.ContainerInstanceID]; found {
+					ti.task.EC2InstanceID = id
+					items[i] = ti
+				}
+			}
+		}
+		m.list.SetItems(items)
+		m.updateDetail()
+		return m, nil
 
 	case envVarsLoadedMsg:
 		m.loading = false

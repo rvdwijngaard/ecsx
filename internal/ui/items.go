@@ -26,6 +26,7 @@ type serviceDetailLoadedMsg struct {
 }
 type servicesLoadedMsg struct{ services []ecsaws.Service }
 type tasksLoadedMsg struct{ tasks []ecsaws.Task }
+type taskEC2ResolvedMsg struct{ ec2Map map[string]string }
 type envVarsLoadedMsg struct{ containers []ecsaws.ContainerDefinition }
 type serviceScaledMsg struct{}
 type serviceRedeployedMsg struct{}

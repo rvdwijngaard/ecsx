@@ -227,6 +227,15 @@ func taskCmd() *cobra.Command {
 				return fmt.Errorf("no tasks found")
 			}
 
+			// Resolve EC2 instance IDs
+			if ec2Map, err := client.ResolveTaskEC2Instances(ctx, cluster, tasks); err == nil {
+				for i := range tasks {
+					if id, ok := ec2Map[tasks[i].ContainerInstanceID]; ok {
+						tasks[i].EC2InstanceID = id
+					}
+				}
+			}
+
 			t := tasks[0]
 			fmt.Printf("Task:            %s\n", t.ID)
 			fmt.Printf("ARN:             %s\n", t.ARN)

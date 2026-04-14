@@ -156,6 +156,10 @@ func (c *CachedClient) TailLogs(ctx context.Context, logGroup string, logStreamP
 	return c.Client.TailLogs(ctx, logGroup, logStreamPrefix, filterPattern)
 }
 
+func (c *CachedClient) ResolveTaskEC2Instances(ctx context.Context, cluster string, tasks []Task) (map[string]string, error) {
+	return c.Client.ResolveTaskEC2Instances(ctx, cluster, tasks)
+}
+
 func (c *CachedClient) FetchRecentLogs(ctx context.Context, logGroup string, logStreamPrefix string, filterPattern string, start time.Time, end *time.Time) ([]LogEvent, error) {
 	return c.Client.FetchRecentLogs(ctx, logGroup, logStreamPrefix, filterPattern, start, end)
 }
