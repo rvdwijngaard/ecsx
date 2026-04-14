@@ -39,6 +39,8 @@ type ECSClient interface {
 	ListContainerInstances(ctx context.Context, cluster string) ([]ContainerInstance, error)
 	DescribeTaskDefinition(ctx context.Context, taskDef string) ([]ContainerDefinition, error)
 	UpdateServiceDesiredCount(ctx context.Context, cluster, service string, desiredCount int32) error
+	ForceNewDeployment(ctx context.Context, cluster, service string) error
+	StopTask(ctx context.Context, cluster, taskARN, reason string) error
 	ExecuteCommand(ctx context.Context, cluster, task, container, command string) (*ExecuteCommandOutput, error)
 	GetServiceMetrics(ctx context.Context, cluster, service string) (*ServiceMetrics, error)
 	TailLogs(ctx context.Context, logGroup string, logStreamPrefix string, filterPattern string) (<-chan LogEvent, error)
@@ -505,6 +507,33 @@ func (c *Client) UpdateServiceDesiredCount(ctx context.Context, cluster, service
 	})
 	if err != nil {
 		return fmt.Errorf("updating service: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) ForceNewDeployment(ctx context.Context, cluster, service string) error {
+	_, err := c.ecs.UpdateService(ctx, &ecs.UpdateServiceInput{
+		Cluster:            &cluster,
+		Service:            &service,
+		ForceNewDeployment: true,
+	})
+	if err != nil {
+		return fmt.Errorf("force new deployment: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) StopTask(ctx context.Context, cluster, taskARN, reason string) error {
+	input := &ecs.StopTaskInput{
+		Cluster: &cluster,
+		Task:    &taskARN,
+	}
+	if reason != "" {
+		input.Reason = &reason
+	}
+	_, err := c.ecs.StopTask(ctx, input)
+	if err != nil {
+		return fmt.Errorf("stop task: %w", err)
 	}
 	return nil
 }

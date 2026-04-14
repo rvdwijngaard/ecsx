@@ -32,6 +32,7 @@ type Model struct {
 	showHelp    bool
 	scaling     bool
 	confirming  bool
+	confirmAction string // "scale", "deploy", "stop"
 	scaleInput  textinput.Model
 	scaleSvc    string
 	scaleCount  int32
@@ -170,9 +171,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.confirming {
 			switch msg.String() {
 			case "enter":
-				return m.executeScale()
+				switch m.confirmAction {
+				case "deploy":
+					return m.executeForceNewDeployment()
+				case "stop":
+					return m.executeStopTask()
+				default:
+					return m.executeScale()
+				}
 			case "esc":
 				m.confirming = false
+				m.confirmAction = ""
 				m.updateDetail()
 				return m, nil
 			}
@@ -248,8 +257,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.handleLogs()
 			}
 		case "x":
-			if m.list.FilterState() != list.Filtering && !m.showHelp && (m.level == viewClusters || m.level == viewServices || m.level == viewTasks) {
-				return m.handleSSM()
+			if m.list.FilterState() != list.Filtering && !m.showHelp {
+				switch m.level {
+				case viewServices:
+					return m.handleForceNewDeployment()
+				case viewTasks:
+					return m.handleStopTask()
+				case viewClusters:
+					return m.handleSSM()
+				}
 			}
 		case "+", "-":
 			if m.list.FilterState() != list.Filtering && !m.showHelp {
@@ -371,6 +387,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case serviceScaledMsg:
 		m.loading = false
 		return m, m.loadServiceNames(m.clusterName)
+
+	case serviceRedeployedMsg:
+		m.loading = false
+		return m, m.loadServiceNames(m.clusterName)
+
+	case taskStoppedMsg:
+		m.loading = false
+		return m, m.loadTasks(m.clusterName, m.serviceName)
 
 	case metricsLoadedMsg:
 		m.metricsMap[msg.service] = msg.metrics

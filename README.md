@@ -24,6 +24,8 @@ open SSM sessions — without leaving your terminal.
 - 📜 **Logs** — real-time CloudWatch log tailing with filter patterns
 - 📝 **Editor** — open buffered logs in `$EDITOR` for search and analysis
 - ⚖️ **Scale** — update desired count on the fly
+- 🔄 **Deploy** — force new deployment to restart services
+- 🛑 **Stop** — stop individual tasks
 - 🔑 **Env vars** — inspect container environment, copy to clipboard
 - 🐚 **Exec** — shell into running containers via ECS ExecuteCommand
 - 🔌 **SSM** — connect to EC2 container instances
@@ -124,7 +126,7 @@ ecsx completion fish > ~/.config/fish/completions/ecsx.fish
 | `e`     | Open logs in `$EDITOR` / toggle env vars |
 | `y`     | Copy env vars to clipboard      |
 | `s`     | Scale service                   |
-| `x`     | Open SSM session                |
+| `x`     | Deploy / stop task / SSM session |
 | `r`     | Refresh                         |
 | `+` `-` | Toggle zoom                     |
 | `?`     | Help                            |

@@ -33,23 +33,47 @@ func (m *Model) breadcrumb() string {
 
 func (m *Model) updateDetail() {
 	if m.confirming {
-		sel := m.list.SelectedItem()
-		if sel == nil {
+		switch m.confirmAction {
+		case "deploy":
+			var b strings.Builder
+			fmt.Fprintf(&b, "%s\n\n", titleStyle.Render("Force New Deployment"))
+			fmt.Fprintf(&b, "  Service: %s\n\n", m.scaleSvc)
+			fmt.Fprintf(&b, "  %s\n\n", warnStyle.Render("⚠ This will trigger a rolling restart of all tasks."))
+			fmt.Fprintf(&b, "  %s\n", helpStyle.Render("enter confirm • esc cancel"))
+			m.detail.SetContent(b.String())
+			return
+		case "stop":
+			sel := m.list.SelectedItem()
+			if sel == nil {
+				return
+			}
+			t := sel.(taskItem).task
+			var b strings.Builder
+			fmt.Fprintf(&b, "%s\n\n", titleStyle.Render("Stop Task"))
+			fmt.Fprintf(&b, "  Task: %s\n\n", t.ID)
+			fmt.Fprintf(&b, "  %s\n\n", warnStyle.Render("⚠ This will stop the task immediately."))
+			fmt.Fprintf(&b, "  %s\n", helpStyle.Render("enter confirm • esc cancel"))
+			m.detail.SetContent(b.String())
+			return
+		default:
+			sel := m.list.SelectedItem()
+			if sel == nil {
+				return
+			}
+			svc := sel.(serviceItem).service
+			if svc == nil {
+				return
+			}
+			var b strings.Builder
+			fmt.Fprintf(&b, "%s\n\n", titleStyle.Render("Confirm Scale "+svc.Name))
+			fmt.Fprintf(&b, "  %d → %d tasks\n\n", svc.DesiredCount, m.scaleCount)
+			if m.scaleCount == 0 {
+				fmt.Fprintf(&b, "  %s\n\n", warnStyle.Render("⚠ This will stop all running tasks!"))
+			}
+			fmt.Fprintf(&b, "  %s\n", helpStyle.Render("enter confirm • esc cancel"))
+			m.detail.SetContent(b.String())
 			return
 		}
-		svc := sel.(serviceItem).service
-		if svc == nil {
-			return
-		}
-		var b strings.Builder
-		fmt.Fprintf(&b, "%s\n\n", titleStyle.Render("Confirm Scale "+svc.Name))
-		fmt.Fprintf(&b, "  %d → %d tasks\n\n", svc.DesiredCount, m.scaleCount)
-		if m.scaleCount == 0 {
-			fmt.Fprintf(&b, "  %s\n\n", warnStyle.Render("⚠ This will stop all running tasks!"))
-		}
-		fmt.Fprintf(&b, "  %s\n", helpStyle.Render("enter confirm • esc cancel"))
-		m.detail.SetContent(b.String())
-		return
 	}
 	if m.scaling {
 		sel := m.list.SelectedItem()
@@ -307,7 +331,7 @@ func (m *Model) renderHelp() string {
 	fmt.Fprintf(&b, "  %-16s %s\n", "/ (in logs)", "Filter log lines")
 	fmt.Fprintf(&b, "  %-16s %s\n", "e (in logs)", "Open logs in $EDITOR")
 	fmt.Fprintf(&b, "  %-16s %s\n", "s", "Scale service (set desired count)")
-	fmt.Fprintf(&b, "  %-16s %s\n", "x", "Start SSM session on EC2 instance")
+	fmt.Fprintf(&b, "  %-16s %s\n", "x", "Action: deploy (services) / stop (tasks) / SSM (clusters)")
 	fmt.Fprintf(&b, "  %-16s %s\n", "r", "Refresh (purge cache)")
 	fmt.Fprintf(&b, "  %-16s %s\n", "y", "Yank env vars to clipboard")
 	fmt.Fprintf(&b, "  %-16s %s\n", "+/-", "Toggle zoom (fullscreen detail)")
@@ -333,12 +357,15 @@ func (m Model) helpText() string {
 		parts = append(parts, "enter select", "esc back", "e env vars", "l logs")
 	}
 	if m.level == viewServices {
-		parts = append(parts, "s scale")
+		parts = append(parts, "s scale", "x deploy")
+	}
+	if m.level == viewTasks {
+		parts = append(parts, "x stop")
 	}
 	if m.showEnvVars {
 		parts = append(parts, "y yank")
 	}
-	if m.level == viewClusters || m.level == viewServices || m.level == viewTasks {
+	if m.level == viewClusters {
 		parts = append(parts, "x ssm")
 	}
 	parts = append(parts, "r refresh", "+/- zoom", "? help", "q quit")

@@ -120,6 +120,27 @@ func (c *CachedClient) UpdateServiceDesiredCount(ctx context.Context, cluster, s
 	return nil
 }
 
+func (c *CachedClient) ForceNewDeployment(ctx context.Context, cluster, service string) error {
+	err := c.Client.ForceNewDeployment(ctx, cluster, service)
+	if err != nil {
+		return err
+	}
+	c.services.Delete(cluster)
+	c.svcDetail.Delete(cluster + "/" + service)
+	c.tasks.Delete(cluster + "/" + service)
+	return nil
+}
+
+func (c *CachedClient) StopTask(ctx context.Context, cluster, taskARN, reason string) error {
+	err := c.Client.StopTask(ctx, cluster, taskARN, reason)
+	if err != nil {
+		return err
+	}
+	// Invalidate all task caches for this cluster
+	c.tasks.Purge()
+	return nil
+}
+
 func (c *CachedClient) Purge() {
 	c.clusters.Purge()
 	c.svcNames.Purge()

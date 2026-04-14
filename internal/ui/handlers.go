@@ -184,6 +184,7 @@ func (m Model) confirmScale() (tea.Model, tea.Cmd) {
 	}
 	m.scaling = false
 	m.confirming = true
+	m.confirmAction = "scale"
 	m.scaleCount = int32(val)
 	m.updateDetail()
 	return m, nil
@@ -275,6 +276,79 @@ func (m Model) handleSSM() (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.spinner.Tick, m.loadContainerInstances(c.Name))
 	}
 	return m, nil
+}
+
+func (m Model) handleForceNewDeployment() (tea.Model, tea.Cmd) {
+	if m.loading || m.level != viewServices {
+		return m, nil
+	}
+	sel := m.list.SelectedItem()
+	if sel == nil {
+		return m, nil
+	}
+	svc := sel.(serviceItem).service
+	if svc == nil {
+		return m, nil
+	}
+	m.confirming = true
+	m.confirmAction = "deploy"
+	m.scaleSvc = svc.Name
+	m.updateDetail()
+	return m, nil
+}
+
+func (m Model) executeForceNewDeployment() (tea.Model, tea.Cmd) {
+	m.confirming = false
+	m.confirmAction = ""
+	m.loading = true
+	cluster := m.clusterName
+	svc := m.scaleSvc
+	return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
+		err := m.client.ForceNewDeployment(context.Background(), cluster, svc)
+		if err != nil {
+			return errMsg{err}
+		}
+		return serviceRedeployedMsg{}
+	})
+}
+
+func (m Model) handleStopTask() (tea.Model, tea.Cmd) {
+	if m.loading || m.level != viewTasks {
+		return m, nil
+	}
+	sel := m.list.SelectedItem()
+	if sel == nil {
+		return m, nil
+	}
+	t := sel.(taskItem).task
+	if t.Status != "RUNNING" {
+		m.err = fmt.Errorf("task is %s, not RUNNING", t.Status)
+		return m, nil
+	}
+	m.confirming = true
+	m.confirmAction = "stop"
+	m.updateDetail()
+	return m, nil
+}
+
+func (m Model) executeStopTask() (tea.Model, tea.Cmd) {
+	m.confirming = false
+	m.confirmAction = ""
+	sel := m.list.SelectedItem()
+	if sel == nil {
+		return m, nil
+	}
+	t := sel.(taskItem).task
+	m.loading = true
+	cluster := m.clusterName
+	taskARN := t.ARN
+	return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
+		err := m.client.StopTask(context.Background(), cluster, taskARN, "Stopped via ecsx")
+		if err != nil {
+			return errMsg{err}
+		}
+		return taskStoppedMsg{}
+	})
 }
 
 func (m Model) handleLogs() (tea.Model, tea.Cmd) {
