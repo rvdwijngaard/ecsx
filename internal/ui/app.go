@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -14,6 +15,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	ecsaws "github.com/ron/ecsx/internal/aws"
+	"github.com/ron/ecsx/internal/logs"
 )
 
 type Model struct {
@@ -47,6 +49,11 @@ type Model struct {
 	logFilterInput   textinput.Model
 	logGroup         string
 	logStreamPrefix  string
+	logLevel         logs.Level
+	logGrep          string
+	logGrepRe        *regexp.Regexp
+	logGrepping      bool
+	logGrepInput     textinput.Model
 
 	zoomed  bool
 	loading bool
@@ -215,6 +222,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateDetail()
 			return m, cmd
 		}
+		if m.logGrepping {
+			switch msg.String() {
+			case "enter":
+				pattern := m.logGrepInput.Value()
+				if pattern == "" {
+					m.logGrep = ""
+					m.logGrepRe = nil
+				} else {
+					re, err := regexp.Compile(pattern)
+					if err != nil {
+						m.err = fmt.Errorf("invalid regex: %w", err)
+						m.logGrepping = false
+						m.updateDetail()
+						return m, nil
+					}
+					m.logGrep = pattern
+					m.logGrepRe = re
+				}
+				m.logGrepping = false
+				m.updateDetail()
+				m.detail.GotoBottom()
+				return m, nil
+			case "esc":
+				m.logGrepping = false
+				m.updateDetail()
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.logGrepInput, cmd = m.logGrepInput.Update(msg)
+			m.updateDetail()
+			return m, cmd
+		}
 		switch msg.String() {
 		case "q", "ctrl+c":
 			if m.list.FilterState() == list.Filtering {
@@ -290,6 +329,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.updateSizes()
 				m.updateDetail()
 				return m, nil
+			}
+		case "f":
+			if m.level == viewLogs && !m.showHelp && !m.logFiltering {
+				m.logLevel = m.logLevel.Toggle()
+				m.updateDetail()
+				m.detail.GotoBottom()
+				return m, nil
+			}
+		case "g":
+			if m.level == viewLogs && !m.showHelp && !m.logFiltering {
+				m.logGrepping = true
+				ti := textinput.New()
+				ti.Placeholder = "regex pattern"
+				ti.SetValue(m.logGrep)
+				ti.SetWidth(40)
+				m.logGrepInput = ti
+				cmd := m.logGrepInput.Focus()
+				m.updateDetail()
+				m.detail.GotoTop()
+				return m, cmd
 			}
 		case "/":
 			if m.level == viewLogs && !m.showHelp {
@@ -567,7 +626,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case autoRefreshMsg:
 		// Always re-schedule the next tick
 		next := autoRefreshCmd()
-		if !m.autoRefresh || m.loading || m.err != nil || m.scaling || m.confirming || m.showHelp || m.logFiltering || m.list.FilterState() == list.Filtering {
+		if !m.autoRefresh || m.loading || m.err != nil || m.scaling || m.confirming || m.showHelp || m.logFiltering || m.logGrepping || m.list.FilterState() == list.Filtering {
 			return m, next
 		}
 		if cc, ok := m.client.(*ecsaws.CachedClient); ok {

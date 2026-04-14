@@ -657,7 +657,6 @@ func (c *Client) FetchRecentLogs(ctx context.Context, logGroup string, logStream
 	input := &cloudwatchlogs.FilterLogEventsInput{
 		LogGroupName: &logGroup,
 		StartTime:    &startMs,
-		Limit:        aws.Int32(200),
 	}
 	if end != nil {
 		endMs := end.UnixMilli()
@@ -669,19 +668,22 @@ func (c *Client) FetchRecentLogs(ctx context.Context, logGroup string, logStream
 	if filterPattern != "" {
 		input.FilterPattern = &filterPattern
 	}
-	out, err := c.logs.FilterLogEvents(ctx, input)
-	if err != nil {
-		return nil, fmt.Errorf("filtering log events: %w", err)
-	}
-	events := make([]LogEvent, 0, len(out.Events))
-	for _, e := range out.Events {
-		events = append(events, LogEvent{
-			Timestamp: time.UnixMilli(aws.ToInt64(e.Timestamp)),
-			Message:   strings.TrimRight(aws.ToString(e.Message), "\n"),
-			Stream:    aws.ToString(e.LogStreamName),
-			EventID:   aws.ToString(e.EventId),
-			LogGroup:  logGroup,
-		})
+	var events []LogEvent
+	p := cloudwatchlogs.NewFilterLogEventsPaginator(c.logs, input)
+	for p.HasMorePages() {
+		page, err := p.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("filtering log events: %w", err)
+		}
+		for _, e := range page.Events {
+			events = append(events, LogEvent{
+				Timestamp: time.UnixMilli(aws.ToInt64(e.Timestamp)),
+				Message:   strings.TrimRight(aws.ToString(e.Message), "\n"),
+				Stream:    aws.ToString(e.LogStreamName),
+				EventID:   aws.ToString(e.EventId),
+				LogGroup:  logGroup,
+			})
+		}
 	}
 	return events, nil
 }

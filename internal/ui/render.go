@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	ecsaws "github.com/ron/ecsx/internal/aws"
+	"github.com/ron/ecsx/internal/logs"
 )
 
 func (m *Model) breadcrumb() string {
@@ -293,12 +294,28 @@ var logStreamColors = []color.Color{
 
 func (m *Model) renderLogs() {
 	var b strings.Builder
-	if m.logFiltering {
+	levelTag := ""
+	if m.logLevel != logs.LevelAll {
+		levelTag = " [" + m.logLevel.String() + "]"
+	}
+	if m.logGrepping {
+		fmt.Fprintf(&b, "%s  %s\n\n", titleStyle.Render("Grep:"), m.logGrepInput.View())
+	} else if m.logFiltering {
 		fmt.Fprintf(&b, "%s  %s\n\n", titleStyle.Render("Filter:"), m.logFilterInput.View())
-	} else if m.logFilter != "" {
-		fmt.Fprintf(&b, "%s %s\n\n", titleStyle.Render("Logs (tailing)"), helpStyle.Render("filter: "+m.logFilter))
 	} else {
-		fmt.Fprintf(&b, "%s\n\n", titleStyle.Render("Logs (tailing)"))
+		tags := "Logs (tailing)" + levelTag
+		var hints []string
+		if m.logFilter != "" {
+			hints = append(hints, "filter: "+m.logFilter)
+		}
+		if m.logGrep != "" {
+			hints = append(hints, "grep: /"+m.logGrep+"/")
+		}
+		if len(hints) > 0 {
+			fmt.Fprintf(&b, "%s %s\n\n", titleStyle.Render(tags), helpStyle.Render(strings.Join(hints, " • ")))
+		} else {
+			fmt.Fprintf(&b, "%s\n\n", titleStyle.Render(tags))
+		}
 	}
 	if len(m.logLines) == 0 {
 		fmt.Fprintf(&b, "  %s\n", helpStyle.Render("Waiting for log events..."))
@@ -306,6 +323,12 @@ func (m *Model) renderLogs() {
 		streamColorMap := make(map[string]color.Color)
 		colorIdx := 0
 		for _, ev := range m.logLines {
+			if !m.logLevel.Matches(ev.Message) {
+				continue
+			}
+			if m.logGrepRe != nil && !m.logGrepRe.MatchString(ev.Message) {
+				continue
+			}
 			if _, ok := streamColorMap[ev.Stream]; !ok {
 				streamColorMap[ev.Stream] = logStreamColors[colorIdx%len(logStreamColors)]
 				colorIdx++
@@ -330,6 +353,8 @@ func (m *Model) renderHelp() string {
 	fmt.Fprintf(&b, "  %-16s %s\n", "l", "Tail CloudWatch logs")
 	fmt.Fprintf(&b, "  %-16s %s\n", "/ (in logs)", "Filter log lines")
 	fmt.Fprintf(&b, "  %-16s %s\n", "e (in logs)", "Open logs in $EDITOR")
+	fmt.Fprintf(&b, "  %-16s %s\n", "f (in logs)", "Cycle log level filter (ALL/INF/WARN/ERR)")
+	fmt.Fprintf(&b, "  %-16s %s\n", "g (in logs)", "Regex grep filter")
 	fmt.Fprintf(&b, "  %-16s %s\n", "s", "Scale service (set desired count)")
 	fmt.Fprintf(&b, "  %-16s %s\n", "x", "Action: deploy (services) / stop (tasks) / SSM (clusters)")
 	fmt.Fprintf(&b, "  %-16s %s\n", "r", "Refresh (purge cache)")
@@ -353,7 +378,7 @@ func (m Model) helpText() string {
 	if m.level == viewClusters {
 		parts = append(parts, "enter select")
 	} else if m.level == viewLogs {
-		parts = append(parts, "esc back", "e editor", "/ filter")
+		parts = append(parts, "esc back", "e editor", "f level:"+m.logLevel.String(), "g grep", "/ filter")
 	} else {
 		parts = append(parts, "enter select", "esc back", "e env vars", "l logs")
 	}

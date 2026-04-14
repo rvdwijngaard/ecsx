@@ -69,7 +69,7 @@ func main() {
 }
 
 func logsCmd() *cobra.Command {
-	var service, task, filter string
+	var service, task, filter, grep string
 	var follow, streamName, groupName, timestamp, eventID bool
 	var start, end logs.TimeFlag
 	start.Default(1 * time.Hour)
@@ -77,6 +77,20 @@ func logsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "logs",
 		Short: "Tail ECS service logs",
+		Long: `Tail ECS service logs from CloudWatch.
+
+Two filtering modes are available:
+
+  -f  Server-side CloudWatch filter pattern. Reduces data sent from AWS.
+  -G  Client-side regex applied after receiving logs. Supports full Go
+      regexp syntax including case-insensitive matching with (?i).
+
+Examples:
+  ecsx logs -c my-cluster -s my-service -G "ERROR|WARN"
+  ecsx logs -c my-cluster -s my-service -G "duration=[0-9]{4,}ms"
+  ecsx logs -c my-cluster -s my-service -G "HTTP/[0-9.]+ 5[0-9]{2}"
+  ecsx logs -c my-cluster -s my-service -G "(?i)timeout|deadline"
+  ecsx logs -c my-cluster -s my-service -f "ERROR" -G "database|connection"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := ecsaws.NewClient(profile, region)
 			if err != nil {
@@ -96,6 +110,7 @@ func logsCmd() *cobra.Command {
 				EventID:    eventID,
 				Start:      start.Time(),
 				End:        end.TimePtr(),
+				Grep:       grep,
 			})
 		},
 		SilenceUsage: true,
@@ -111,6 +126,7 @@ func logsCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&eventID, "event-id", "i", false, "Print the event ID")
 	cmd.Flags().VarP(&start, "start", "b", "Start time: duration (2h30m) or datetime (2024-01-15T09:00)")
 	cmd.Flags().VarP(&end, "end", "e", "End time: duration (30m) or datetime (2024-01-15T10:00)")
+	cmd.Flags().StringVarP(&grep, "grep", "G", "", "Client-side regex filter for log lines")
 	cmd.MarkFlagRequired("service")
 	cmd.MarkPersistentFlagRequired("cluster")
 

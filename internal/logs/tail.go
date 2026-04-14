@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ type Options struct {
 	EventID    bool
 	Start      time.Time
 	End        *time.Time
+	Grep       string
 }
 
 // Tail resolves the log group for a service and streams logs to stdout.
@@ -36,13 +38,21 @@ func Tail(ctx context.Context, client ecsaws.ECSClient, opts Options) error {
 		effectivePrefix = streamPrefix + "/" + opts.Service + "/" + opts.Task
 	}
 
+	var grepRe *regexp.Regexp
+	if opts.Grep != "" {
+		grepRe, err = regexp.Compile(opts.Grep)
+		if err != nil {
+			return fmt.Errorf("invalid grep pattern: %w", err)
+		}
+	}
+
 	if !opts.Start.IsZero() {
 		events, err := client.FetchRecentLogs(ctx, logGroup, effectivePrefix, opts.Filter, opts.Start, opts.End)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: fetching history: %v\n", err)
 		} else {
 			for _, e := range events {
-				printLogEvent(e, opts)
+				printLogEvent(e, opts, grepRe)
 			}
 		}
 	}
@@ -56,12 +66,15 @@ func Tail(ctx context.Context, client ecsaws.ECSClient, opts Options) error {
 		return fmt.Errorf("starting live tail: %w", err)
 	}
 	for event := range ch {
-		printLogEvent(event, opts)
+		printLogEvent(event, opts, grepRe)
 	}
 	return nil
 }
 
-func printLogEvent(e ecsaws.LogEvent, opts Options) {
+func printLogEvent(e ecsaws.LogEvent, opts Options, grepRe *regexp.Regexp) {
+	if grepRe != nil && !grepRe.MatchString(e.Message) {
+		return
+	}
 	var parts []string
 	if opts.Timestamp {
 		parts = append(parts, fmt.Sprintf("\033[90m%s\033[0m", e.Timestamp.Local().Format("2006-01-02T15:04:05.000")))

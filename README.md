@@ -69,8 +69,33 @@ ecsx -p prod -r eu-west-1     # specify AWS profile and region
 ```sh
 ecsx logs -c my-cluster -s my-service
 ecsx logs -c my-cluster -s my-service -f "ERROR"         # filter pattern
+ecsx logs -c my-cluster -s my-service -G "ERR|WARN"      # client-side regex grep
 ecsx logs -c my-cluster -s my-service -b 2h              # last 2 hours
 ecsx logs -c my-cluster -s my-service --no-follow        # dump and exit
+```
+
+`-f` is a server-side [CloudWatch filter pattern](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/FilterAndPatternSyntax.html)
+— it reduces the data sent from AWS. `-G` is a client-side regex applied after
+receiving the logs, useful for patterns CloudWatch filters can't express:
+
+```sh
+# Only show ERROR and WARN lines
+ecsx logs -c my-cluster -s my-service -G "ERROR|WARN"
+
+# Match slow requests (4+ digit durations)
+ecsx logs -c my-cluster -s my-service -G "duration=[0-9]{4,}ms"
+
+# Filter by specific HTTP status codes (5xx errors)
+ecsx logs -c my-cluster -s my-service -G "HTTP/[0-9.]+ 5[0-9]{2}"
+
+# Match a specific user or request ID
+ecsx logs -c my-cluster -s my-service -G "user=(alice|bob)"
+
+# Case-insensitive match
+ecsx logs -c my-cluster -s my-service -G "(?i)timeout|deadline"
+
+# Combine server-side filter with client-side grep
+ecsx logs -c my-cluster -s my-service -f "ERROR" -G "database|connection"
 ```
 
 ### `ecsx exec` — shell into a container
@@ -123,6 +148,8 @@ ecsx completion fish > ~/.config/fish/completions/ecsx.fish
 | `enter` | Drill into selected item        |
 | `esc`   | Go back                         |
 | `/`     | Filter list or logs             |
+| `f`     | Cycle log level (in logs)       |
+| `g`     | Regex grep filter (in logs)     |
 | `l`     | Tail logs                       |
 | `e`     | Open logs in `$EDITOR` / toggle env vars |
 | `y`     | Copy env vars to clipboard      |

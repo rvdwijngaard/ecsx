@@ -58,6 +58,8 @@ func (m Model) handleEsc() (tea.Model, tea.Cmd) {
 		m.stopLogTail()
 		m.zoomed = false
 		m.logFilter = ""
+		m.logGrep = ""
+		m.logGrepRe = nil
 		m.logGroup = ""
 		m.logStreamPrefix = ""
 		if m.serviceName != "" {
