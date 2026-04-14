@@ -114,6 +114,20 @@ func (m *Model) stopLogTail() {
 	m.logLines = nil
 }
 
+func (m *Model) filteredLogLines() []ecsaws.LogEvent {
+	var out []ecsaws.LogEvent
+	for _, ev := range m.logLines {
+		if !m.logLevel.Matches(ev.Message) {
+			continue
+		}
+		if m.logGrepRe != nil && !m.logGrepRe.MatchString(ev.Message) {
+			continue
+		}
+		out = append(out, ev)
+	}
+	return out
+}
+
 func (m *Model) startLogTail() tea.Cmd {
 	m.stopLogTail()
 
@@ -279,7 +293,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "e":
 			if !m.showHelp && m.list.FilterState() != list.Filtering {
 				if m.level == viewLogs && !m.logFiltering {
-					return m, openLogsInEditor(m.logLines)
+					return m, openLogsInEditor(m.filteredLogLines())
 				}
 				return m.handleEnvVars()
 			}
