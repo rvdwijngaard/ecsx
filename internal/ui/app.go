@@ -54,6 +54,7 @@ type Model struct {
 	logGrepRe        *regexp.Regexp
 	logGrepping      bool
 	logGrepInput     textinput.Model
+	logPinned        bool
 
 	zoomed  bool
 	loading bool
@@ -133,6 +134,7 @@ func (m *Model) startLogTail() tea.Cmd {
 	m.logCh = ch
 	m.level = viewLogs
 	m.zoomed = true
+	m.logPinned = false
 	m.updateDetail()
 	m.detail.GotoBottom()
 	return m.waitForLogEvent()
@@ -328,6 +330,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.zoomed = !m.zoomed
 				m.updateSizes()
 				m.updateDetail()
+				return m, nil
+			}
+		case "up", "k", "pgup", "home":
+			if m.level == viewLogs && !m.showHelp && !m.logFiltering && !m.logGrepping {
+				m.logPinned = true
+				var cmd tea.Cmd
+				m.detail, cmd = m.detail.Update(msg)
+				return m, cmd
+			}
+		case "down", "j", "pgdown":
+			if m.level == viewLogs && !m.showHelp && !m.logFiltering && !m.logGrepping {
+				var cmd tea.Cmd
+				m.detail, cmd = m.detail.Update(msg)
+				m.logPinned = !m.detail.AtBottom()
+				return m, cmd
+			}
+		case "end":
+			if m.level == viewLogs && !m.showHelp && !m.logFiltering && !m.logGrepping {
+				m.logPinned = false
+				m.detail.GotoBottom()
 				return m, nil
 			}
 		case "f":
@@ -553,7 +575,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.logLines = m.logLines[len(m.logLines)-1000:]
 		}
 		m.updateDetail()
-		if !m.logFiltering {
+		if !m.logFiltering && !m.logGrepping && !m.logPinned {
 			m.detail.GotoBottom()
 		}
 		return m, m.waitForLogEvent()

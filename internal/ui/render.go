@@ -303,7 +303,11 @@ func (m *Model) renderLogs() {
 	} else if m.logFiltering {
 		fmt.Fprintf(&b, "%s  %s\n\n", titleStyle.Render("Filter:"), m.logFilterInput.View())
 	} else {
-		tags := "Logs (tailing)" + levelTag
+		tailStatus := "tailing"
+		if m.logPinned {
+			tailStatus = "paused"
+		}
+		tags := "Logs (" + tailStatus + ")" + levelTag
 		var hints []string
 		if m.logFilter != "" {
 			hints = append(hints, "filter: "+m.logFilter)
@@ -378,7 +382,10 @@ func (m Model) helpText() string {
 	if m.level == viewClusters {
 		parts = append(parts, "enter select")
 	} else if m.level == viewLogs {
-		parts = append(parts, "esc back", "e editor", "f level:"+m.logLevel.String(), "g grep", "/ filter")
+		parts = append(parts, "esc back", "↑↓ scroll", "e editor", "f level:"+m.logLevel.String(), "g grep", "/ filter")
+		if m.logPinned {
+			parts = append(parts, "end resume")
+		}
 	} else {
 		parts = append(parts, "enter select", "esc back", "e env vars", "l logs")
 	}
