@@ -56,6 +56,11 @@ type Model struct {
 	logGrepInput     textinput.Model
 	logPinned        bool
 
+	// Log detail browser (frozen snapshot)
+	logSnapshot      []ecsaws.LogEvent
+	logCursor        int
+	logDetailView    viewport.Model
+
 	zoomed  bool
 	loading bool
 	err     error
@@ -78,6 +83,7 @@ func New(client ecsaws.ECSClient, cluster string) Model {
 		list:           l,
 		spinner:        sp,
 		detail:         viewport.New(),
+		logDetailView:  viewport.New(),
 		loading:        true,
 		initialCluster: cluster,
 		clusterName:    cluster,
@@ -112,6 +118,27 @@ func (m *Model) stopLogTail() {
 	}
 	m.logCh = nil
 	m.logLines = nil
+}
+
+func (m *Model) scrollSnapshotToCursor() {
+	// +2 for header lines in renderLogSnapshot
+	line := m.logCursor + 2
+	panelH := m.height - 2
+	if panelH < 3 {
+		panelH = 3
+	}
+	viewH := (panelH-2)*60/100 - 2
+	if viewH < 1 {
+		viewH = 1
+	}
+	// Pre-set the viewport height to match View()'s split sizing
+	m.detail.SetHeight(viewH)
+	top := m.detail.YOffset()
+	if line < top {
+		m.detail.SetYOffset(line)
+	} else if line >= top+viewH {
+		m.detail.SetYOffset(line - viewH + 1)
+	}
 }
 
 func (m *Model) filteredLogLines() []ecsaws.LogEvent {
@@ -278,6 +305,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "enter":
 			if !m.showHelp && m.list.FilterState() != list.Filtering {
+				if m.level == viewLogs {
+					filtered := m.filteredLogLines()
+					if len(filtered) == 0 {
+						return m, nil
+					}
+					m.logSnapshot = filtered
+					m.logCursor = len(filtered) - 1
+					m.level = viewLogDetail
+					m.updateDetail()
+					m.renderLogDetail()
+m.scrollSnapshotToCursor()
+					return m, nil
+				}
 				return m.handleEnter()
 			}
 		case "esc":
@@ -353,6 +393,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.detail, cmd = m.detail.Update(msg)
 				return m, cmd
 			}
+			if m.level == viewLogDetail {
+				if msg.String() == "home" {
+					m.logCursor = 0
+				} else if msg.String() == "pgup" {
+					m.logCursor -= 10
+				} else {
+					m.logCursor--
+				}
+				if m.logCursor < 0 {
+					m.logCursor = 0
+				}
+				m.updateDetail()
+				m.renderLogDetail()
+m.scrollSnapshotToCursor()
+				return m, nil
+			}
 		case "down", "j", "pgdown":
 			if m.level == viewLogs && !m.showHelp && !m.logFiltering && !m.logGrepping {
 				var cmd tea.Cmd
@@ -360,10 +416,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.logPinned = !m.detail.AtBottom()
 				return m, cmd
 			}
+			if m.level == viewLogDetail {
+				if msg.String() == "pgdown" {
+					m.logCursor += 10
+				} else {
+					m.logCursor++
+				}
+				if m.logCursor >= len(m.logSnapshot) {
+					m.logCursor = len(m.logSnapshot) - 1
+				}
+				m.updateDetail()
+				m.renderLogDetail()
+m.scrollSnapshotToCursor()
+				return m, nil
+			}
 		case "end":
 			if m.level == viewLogs && !m.showHelp && !m.logFiltering && !m.logGrepping {
 				m.logPinned = false
 				m.detail.GotoBottom()
+				return m, nil
+			}
+			if m.level == viewLogDetail {
+				m.logCursor = len(m.logSnapshot) - 1
+				m.updateDetail()
+				m.renderLogDetail()
+m.scrollSnapshotToCursor()
 				return m, nil
 			}
 		case "f":
@@ -588,9 +665,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.logLines) > 1000 {
 			m.logLines = m.logLines[len(m.logLines)-1000:]
 		}
-		m.updateDetail()
-		if !m.logFiltering && !m.logGrepping && !m.logPinned {
-			m.detail.GotoBottom()
+		if m.level != viewLogDetail {
+			m.updateDetail()
+			if !m.logFiltering && !m.logGrepping && !m.logPinned {
+				m.detail.GotoBottom()
+			}
 		}
 		return m, m.waitForLogEvent()
 
@@ -751,11 +830,26 @@ func (m Model) View() tea.View {
 
 		if m.zoomed {
 			fw := m.width
-			m.detail.SetWidth(fw - 2)
-			m.detail.SetHeight(innerH)
-			rightContent := lipgloss.Place(fw-2, innerH, lipgloss.Left, lipgloss.Top, m.detail.View())
-			pane := paneBorder.Render(rightContent)
-			content = lipgloss.JoinVertical(lipgloss.Left, bc, pane, help)
+			if m.level == viewLogDetail {
+				topH := innerH * 60 / 100
+				botH := innerH - topH
+				m.detail.SetWidth(fw - 2)
+				m.detail.SetHeight(topH - 2)
+				m.logDetailView.SetWidth(fw - 2)
+				m.logDetailView.SetHeight(botH - 2)
+				topContent := lipgloss.Place(fw-2, topH-2, lipgloss.Left, lipgloss.Top, m.detail.View())
+				botContent := lipgloss.Place(fw-2, botH-2, lipgloss.Left, lipgloss.Top, m.logDetailView.View())
+				topPane := paneBorder.Render(topContent)
+				botPane := activeBorder.Render(botContent)
+				panes := lipgloss.JoinVertical(lipgloss.Left, topPane, botPane)
+				content = lipgloss.JoinVertical(lipgloss.Left, bc, panes, help)
+			} else {
+				m.detail.SetWidth(fw - 2)
+				m.detail.SetHeight(innerH)
+				rightContent := lipgloss.Place(fw-2, innerH, lipgloss.Left, lipgloss.Top, m.detail.View())
+				pane := paneBorder.Render(rightContent)
+				content = lipgloss.JoinVertical(lipgloss.Left, bc, pane, help)
+			}
 		} else {
 			lw := m.listWidth()
 			dw := m.detailWidth()

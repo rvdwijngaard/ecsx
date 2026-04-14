@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/json"
 	"fmt"
 	"image/color"
 	"strings"
@@ -105,6 +106,10 @@ func (m *Model) updateDetail() {
 			return
 		}
 		m.detail.SetContent("  No items")
+		return
+	}
+	if m.level == viewLogDetail {
+		m.renderLogSnapshot()
 		return
 	}
 	switch m.level {
@@ -339,6 +344,52 @@ func (m *Model) renderLogs() {
 			}
 			sc := streamColorMap[ev.Stream]
 			ts := lipgloss.NewStyle().Foreground(sc).Render(ev.Timestamp.Local().Format("15:04:05"))
+			fmt.Fprintf(&b, "  %s %s\n", ts, ev.Message)
+		}
+	}
+	m.detail.SetContent(b.String())
+}
+
+func (m *Model) renderLogDetail() {
+	if m.logCursor < 0 || m.logCursor >= len(m.logSnapshot) {
+		m.logDetailView.SetContent("")
+		return
+	}
+	ev := m.logSnapshot[m.logCursor]
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n\n", titleStyle.Render("Log Detail"))
+	kv(&b, "Timestamp", ev.Timestamp.Local().Format("2006-01-02 15:04:05.000"))
+	kv(&b, "Stream", ev.Stream)
+	fmt.Fprintf(&b, "\n")
+	msg := strings.TrimSpace(ev.Message)
+	var raw json.RawMessage
+	if json.Unmarshal([]byte(msg), &raw) == nil {
+		if pretty, err := json.MarshalIndent(raw, "  ", "  "); err == nil {
+			fmt.Fprintf(&b, "  %s\n", string(pretty))
+			m.logDetailView.SetContent(b.String())
+			return
+		}
+	}
+	fmt.Fprintf(&b, "  %s\n", msg)
+	m.logDetailView.SetContent(b.String())
+}
+
+func (m *Model) renderLogSnapshot() {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n\n", titleStyle.Render(fmt.Sprintf("Log Browser (%d/%d)", m.logCursor+1, len(m.logSnapshot))))
+	streamColorMap := make(map[string]color.Color)
+	colorIdx := 0
+	for i, ev := range m.logSnapshot {
+		if _, ok := streamColorMap[ev.Stream]; !ok {
+			streamColorMap[ev.Stream] = logStreamColors[colorIdx%len(logStreamColors)]
+			colorIdx++
+		}
+		sc := streamColorMap[ev.Stream]
+		ts := lipgloss.NewStyle().Foreground(sc).Render(ev.Timestamp.Local().Format("15:04:05"))
+		if i == m.logCursor {
+			line := fmt.Sprintf("▸ %s %s", ev.Timestamp.Local().Format("15:04:05"), ev.Message)
+			fmt.Fprintf(&b, "%s\n", lipgloss.NewStyle().Bold(true).Background(lipgloss.Color("62")).Foreground(lipgloss.Color("255")).Render(line))
+		} else {
 			fmt.Fprintf(&b, "  %s %s\n", ts, ev.Message)
 		}
 	}

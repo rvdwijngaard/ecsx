@@ -54,6 +54,14 @@ func (m Model) handleEsc() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch m.level {
+	case viewLogDetail:
+		m.level = viewLogs
+		m.logSnapshot = nil
+		m.updateDetail()
+		if !m.logPinned {
+			m.detail.GotoBottom()
+		}
+		return m, nil
 	case viewLogs:
 		m.stopLogTail()
 		m.zoomed = false

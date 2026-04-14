@@ -14,6 +14,7 @@ const (
 	viewServices
 	viewTasks
 	viewLogs
+	viewLogDetail
 	viewEC2Instances
 )
 
