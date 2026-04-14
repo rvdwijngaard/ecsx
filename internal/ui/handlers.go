@@ -57,6 +57,7 @@ func (m Model) handleEsc() (tea.Model, tea.Cmd) {
 	case viewLogDetail:
 		m.level = viewLogs
 		m.logSnapshot = nil
+		m.updateSizes()
 		m.updateDetail()
 		if !m.logPinned {
 			m.detail.GotoBottom()
