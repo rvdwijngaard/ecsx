@@ -142,6 +142,83 @@ ecsx completion fish > ~/.config/fish/completions/ecsx.fish
 | `--region`  | `-r`  | AWS region                   |
 | `--cluster` | `-c`  | ECS cluster (skip selection) |
 
+## IAM Permissions
+
+By default, ecsx is non-destructive — browsing clusters, services, tasks, logs,
+and metrics requires only read-only permissions. Write actions (scale, deploy,
+stop, exec, ssm) are opt-in and triggered explicitly by the user.
+
+### Read-only (browsing, logs, metrics)
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecs:ListClusters",
+        "ecs:DescribeClusters",
+        "ecs:ListServices",
+        "ecs:DescribeServices",
+        "ecs:ListTasks",
+        "ecs:DescribeTasks",
+        "ecs:ListContainerInstances",
+        "ecs:DescribeContainerInstances",
+        "ecs:DescribeTaskDefinition",
+        "cloudwatch:GetMetricStatistics",
+        "logs:DescribeLogGroups",
+        "logs:StartLiveTail",
+        "logs:FilterLogEvents"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+### Write actions (scale, deploy, stop)
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecs:UpdateService",
+        "ecs:StopTask"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+### ECS Exec and SSM sessions
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecs:ExecuteCommand"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ssm:StartSession"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
 ## Inspiration
 
 Built on the shoulders of these great tools:
