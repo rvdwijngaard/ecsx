@@ -683,6 +683,19 @@ m.scrollSnapshotToCursor()
 		m.logStreamPrefix = msg.streamPrefix
 		return m, m.startLogTail()
 
+	case logGroupsFoundMsg:
+		m.loading = false
+		m.level = viewContainerSelect
+		m.list.ResetFilter()
+		items := make([]list.Item, len(msg.groups))
+		for i, g := range msg.groups {
+			items[i] = containerLogItem{g}
+		}
+		cmd := m.list.SetItems(items)
+		m.list.Title = "Select container"
+		m.updateSizes()
+		return m, cmd
+
 	case ec2InstancesLoadedMsg:
 		m.loading = false
 		if len(msg.instances) == 0 {

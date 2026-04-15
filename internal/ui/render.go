@@ -126,6 +126,12 @@ func (m *Model) updateDetail() {
 		m.renderTaskDetail(sel.(taskItem).task)
 	case viewEC2Instances:
 		m.renderEC2Detail(sel.(ec2Item).instance)
+	case viewContainerSelect:
+		g := sel.(containerLogItem).group
+		m.detail.SetContent(fmt.Sprintf("%s\n\n  %s\n  %s",
+			titleStyle.Render("Select container"),
+			g.Container,
+			helpStyle.Render(g.LogGroup)))
 	case viewLogs:
 		m.renderLogs()
 	}

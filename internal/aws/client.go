@@ -568,6 +568,13 @@ func (c *Client) ExecuteCommand(ctx context.Context, cluster, task, container, c
 }
 
 // LogEvent represents a single CloudWatch log event.
+// ContainerLogGroup holds log configuration for a single container.
+type ContainerLogGroup struct {
+	Container    string
+	LogGroup     string
+	StreamPrefix string
+}
+
 type LogEvent struct {
 	Timestamp time.Time
 	Message   string
@@ -689,7 +696,7 @@ func (c *Client) FetchRecentLogs(ctx context.Context, logGroup string, logStream
 }
 
 // LogGroupForService returns the most common log group pattern for an ECS service.
-func (c *Client) LogGroupForService(ctx context.Context, taskDef string) (string, string, error) {
+func (c *Client) LogGroupForService(ctx context.Context, taskDef string, container string) (string, string, error) {
 	out, err := c.ecs.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: &taskDef,
 	})
@@ -697,22 +704,54 @@ func (c *Client) LogGroupForService(ctx context.Context, taskDef string) (string
 		return "", "", fmt.Errorf("describing task definition: %w", err)
 	}
 	for _, cd := range out.TaskDefinition.ContainerDefinitions {
-		if cd.LogConfiguration != nil && cd.LogConfiguration.LogDriver == "awslogs" {
-			opts := cd.LogConfiguration.Options
-			group := opts["awslogs-group"]
-			prefix := opts["awslogs-stream-prefix"]
-			if group != "" {
-				return group, prefix, nil
-			}
+		if cd.LogConfiguration == nil || cd.LogConfiguration.LogDriver != "awslogs" {
+			continue
 		}
+		if container != "" && !strings.EqualFold(aws.ToString(cd.Name), container) {
+			continue
+		}
+		opts := cd.LogConfiguration.Options
+		group := opts["awslogs-group"]
+		prefix := opts["awslogs-stream-prefix"]
+		if group != "" {
+			return group, prefix, nil
+		}
+	}
+	if container != "" {
+		return "", "", fmt.Errorf("no awslogs log group found for container %q in task definition %s", container, taskDef)
 	}
 	return "", "", fmt.Errorf("no awslogs log group found in task definition %s", taskDef)
 }
 
+// LogGroupsForService returns all container log groups from a task definition.
+func (c *Client) LogGroupsForService(ctx context.Context, taskDef string) ([]ContainerLogGroup, error) {
+	out, err := c.ecs.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
+		TaskDefinition: &taskDef,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("describing task definition: %w", err)
+	}
+	var groups []ContainerLogGroup
+	for _, cd := range out.TaskDefinition.ContainerDefinitions {
+		if cd.LogConfiguration == nil || cd.LogConfiguration.LogDriver != "awslogs" {
+			continue
+		}
+		opts := cd.LogConfiguration.Options
+		if g := opts["awslogs-group"]; g != "" {
+			groups = append(groups, ContainerLogGroup{
+				Container:    aws.ToString(cd.Name),
+				LogGroup:     g,
+				StreamPrefix: opts["awslogs-stream-prefix"],
+			})
+		}
+	}
+	return groups, nil
+}
+
 // FindLogGroup looks up the log group from a service's task definition.
-func FindLogGroup(ctx context.Context, client ECSClient, cluster, service string) (logGroup, streamPrefix string, err error) {
+func FindLogGroup(ctx context.Context, client ECSClient, cluster, service, container string) (logGroup, streamPrefix string, err error) {
 	type logGroupFinder interface {
-		LogGroupForService(ctx context.Context, taskDef string) (string, string, error)
+		LogGroupForService(ctx context.Context, taskDef string, container string) (string, string, error)
 	}
 
 	// Get the service to find its task definition
@@ -732,5 +771,26 @@ func FindLogGroup(ctx context.Context, client ECSClient, cluster, service string
 		return "", "", fmt.Errorf("unsupported client type for log group lookup")
 	}
 
-	return finder.LogGroupForService(ctx, svc.TaskDefinition)
+	return finder.LogGroupForService(ctx, svc.TaskDefinition, container)
+}
+
+// FindLogGroups returns all container log groups for a service.
+func FindLogGroups(ctx context.Context, client ECSClient, cluster, service string) ([]ContainerLogGroup, error) {
+	svc, err := client.DescribeService(ctx, cluster, service)
+	if err != nil {
+		return nil, err
+	}
+	type multiLogGroupFinder interface {
+		LogGroupsForService(ctx context.Context, taskDef string) ([]ContainerLogGroup, error)
+	}
+	var finder multiLogGroupFinder
+	switch c := client.(type) {
+	case *CachedClient:
+		finder = c.Client
+	case *Client:
+		finder = c
+	default:
+		return nil, fmt.Errorf("unsupported client type for log group lookup")
+	}
+	return finder.LogGroupsForService(ctx, svc.TaskDefinition)
 }

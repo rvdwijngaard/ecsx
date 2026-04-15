@@ -16,6 +16,7 @@ const (
 	viewLogs
 	viewLogDetail
 	viewEC2Instances
+	viewContainerSelect
 )
 
 // Messages
@@ -42,6 +43,7 @@ type logGroupFoundMsg struct {
 	logGroup     string
 	streamPrefix string
 }
+type logGroupsFoundMsg struct{ groups []ecsaws.ContainerLogGroup }
 type errMsg struct{ err error }
 type autoRefreshMsg struct{}
 
@@ -56,6 +58,12 @@ func (i ec2Item) Description() string {
 	return fmt.Sprintf("%s running=%d pending=%d", i.instance.Status, i.instance.RunningTasks, i.instance.PendingTasks)
 }
 func (i ec2Item) FilterValue() string { return i.instance.EC2InstanceID }
+
+type containerLogItem struct{ group ecsaws.ContainerLogGroup }
+
+func (i containerLogItem) Title() string       { return i.group.Container }
+func (i containerLogItem) Description() string  { return i.group.LogGroup }
+func (i containerLogItem) FilterValue() string  { return i.group.Container }
 
 // List items
 type clusterItem struct{ cluster ecsaws.Cluster }

@@ -16,6 +16,7 @@ type Options struct {
 	Cluster    string
 	Service    string
 	Task       string
+	Container  string
 	Filter     string
 	Follow     bool
 	StreamName bool
@@ -29,7 +30,7 @@ type Options struct {
 
 // Tail resolves the log group for a service and streams logs to stdout.
 func Tail(ctx context.Context, client ecsaws.ECSClient, opts Options) error {
-	logGroup, streamPrefix, err := ecsaws.FindLogGroup(ctx, client, opts.Cluster, opts.Service)
+	logGroup, streamPrefix, err := ecsaws.FindLogGroup(ctx, client, opts.Cluster, opts.Service, opts.Container)
 	if err != nil {
 		return fmt.Errorf("finding log group for %s/%s: %w", opts.Cluster, opts.Service, err)
 	}

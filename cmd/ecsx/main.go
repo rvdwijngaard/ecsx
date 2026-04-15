@@ -69,7 +69,7 @@ func main() {
 }
 
 func logsCmd() *cobra.Command {
-	var service, task, filter, grep string
+	var service, task, filter, grep, container string
 	var follow, streamName, groupName, timestamp, eventID bool
 	var start, end logs.TimeFlag
 	start.Default(1 * time.Hour)
@@ -102,6 +102,7 @@ Examples:
 				Cluster:    cluster,
 				Service:    service,
 				Task:       task,
+				Container:  container,
 				Filter:     filter,
 				Follow:     follow,
 				StreamName: streamName,
@@ -118,6 +119,7 @@ Examples:
 
 	cmd.Flags().StringVarP(&service, "service", "s", "", "ECS service name (required)")
 	cmd.Flags().StringVarP(&task, "task", "t", "", "Filter to specific task ID")
+	cmd.Flags().StringVarP(&container, "container", "u", "", "Target a specific container's log group")
 	cmd.Flags().StringVarP(&filter, "filter", "f", "", "CloudWatch filter pattern")
 	cmd.Flags().BoolVarP(&follow, "follow", "F", true, "Follow log output (use --no-follow to dump and exit)")
 	cmd.Flags().BoolVarP(&streamName, "stream-name", "n", false, "Print the log stream name per line")

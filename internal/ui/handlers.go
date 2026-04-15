@@ -39,6 +39,11 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 	case viewEC2Instances:
 		inst := sel.(ec2Item).instance
 		return m, startSSMSession(inst.EC2InstanceID, m.client.Region(), m.client.Profile())
+	case viewContainerSelect:
+		g := sel.(containerLogItem).group
+		m.logGroup = g.LogGroup
+		m.logStreamPrefix = g.StreamPrefix
+		return m, m.startLogTail()
 	}
 	return m, nil
 }
@@ -82,6 +87,15 @@ func (m Model) handleEsc() (tea.Model, tea.Cmd) {
 	case viewEC2Instances:
 		m.loading = true
 		return m, tea.Batch(m.spinner.Tick, m.loadClusters())
+	case viewContainerSelect:
+		if m.serviceName != "" {
+			m.level = viewTasks
+			m.loading = true
+			return m, tea.Batch(m.spinner.Tick, m.loadTasks(m.clusterName, m.serviceName))
+		}
+		m.level = viewServices
+		m.loading = true
+		return m, tea.Batch(m.spinner.Tick, m.loadServiceNames(m.clusterName))
 	case viewServices:
 		if m.initialCluster != "" {
 			return m, tea.Quit
@@ -387,10 +401,16 @@ func (m Model) handleLogs() (tea.Model, tea.Cmd) {
 	cluster := m.clusterName
 	client := m.client
 	return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
-		logGroup, streamPrefix, err := ecsaws.FindLogGroup(context.Background(), client, cluster, svcName)
+		groups, err := ecsaws.FindLogGroups(context.Background(), client, cluster, svcName)
 		if err != nil {
 			return errMsg{err}
 		}
-		return logGroupFoundMsg{logGroup: logGroup, streamPrefix: streamPrefix}
+		if len(groups) == 0 {
+			return errMsg{fmt.Errorf("no log groups found for service %s", svcName)}
+		}
+		if len(groups) == 1 {
+			return logGroupFoundMsg{logGroup: groups[0].LogGroup, streamPrefix: groups[0].StreamPrefix}
+		}
+		return logGroupsFoundMsg{groups: groups}
 	})
 }
