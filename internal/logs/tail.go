@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/term"
+
 	ecsaws "github.com/ron/ecsx/internal/aws"
 )
 
@@ -26,6 +28,7 @@ type Options struct {
 	Start      time.Time
 	End        *time.Time
 	Grep       string
+	Color      string // "auto", "on", "off"
 }
 
 // Tail resolves the log group for a service and streams logs to stdout.
@@ -72,22 +75,50 @@ func Tail(ctx context.Context, client ecsaws.ECSClient, opts Options) error {
 	return nil
 }
 
+func useColor(opts Options) bool {
+	switch opts.Color {
+	case "on":
+		return true
+	case "off":
+		return false
+	default: // "auto"
+		return term.IsTerminal(int(os.Stdout.Fd()))
+	}
+}
+
 func printLogEvent(e ecsaws.LogEvent, opts Options, grepRe *regexp.Regexp) {
 	if grepRe != nil && !grepRe.MatchString(e.Message) {
 		return
 	}
+	color := useColor(opts)
 	var parts []string
 	if opts.Timestamp {
-		parts = append(parts, fmt.Sprintf("\033[90m%s\033[0m", e.Timestamp.Local().Format("2006-01-02T15:04:05.000")))
+		ts := e.Timestamp.Local().Format("2006-01-02T15:04:05.000")
+		if color {
+			ts = "\033[90m" + ts + "\033[0m"
+		}
+		parts = append(parts, ts)
 	}
 	if opts.GroupName && e.LogGroup != "" {
-		parts = append(parts, fmt.Sprintf("\033[33m%s\033[0m", e.LogGroup))
+		g := e.LogGroup
+		if color {
+			g = "\033[33m" + g + "\033[0m"
+		}
+		parts = append(parts, g)
 	}
 	if opts.StreamName && e.Stream != "" {
-		parts = append(parts, fmt.Sprintf("\033[36m%s\033[0m", e.Stream))
+		s := e.Stream
+		if color {
+			s = "\033[36m" + s + "\033[0m"
+		}
+		parts = append(parts, s)
 	}
 	if opts.EventID && e.EventID != "" {
-		parts = append(parts, fmt.Sprintf("\033[90m%s\033[0m", e.EventID))
+		id := e.EventID
+		if color {
+			id = "\033[90m" + id + "\033[0m"
+		}
+		parts = append(parts, id)
 	}
 	parts = append(parts, e.Message)
 	fmt.Println(strings.Join(parts, " "))

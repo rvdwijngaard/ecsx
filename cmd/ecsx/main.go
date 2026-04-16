@@ -69,7 +69,7 @@ func main() {
 }
 
 func logsCmd() *cobra.Command {
-	var service, task, filter, grep, container string
+	var service, task, filter, grep, container, color string
 	var follow, streamName, groupName, timestamp, eventID bool
 	var start, end logs.TimeFlag
 	start.Default(1 * time.Hour)
@@ -112,6 +112,7 @@ Examples:
 				Start:      start.Time(),
 				End:        end.TimePtr(),
 				Grep:       grep,
+				Color:      color,
 			})
 		},
 		SilenceUsage: true,
@@ -129,6 +130,7 @@ Examples:
 	cmd.Flags().VarP(&start, "start", "b", "Start time: duration (2h30m) or datetime (2024-01-15T09:00)")
 	cmd.Flags().VarP(&end, "end", "e", "End time: duration (30m) or datetime (2024-01-15T10:00)")
 	cmd.Flags().StringVarP(&grep, "grep", "G", "", "Client-side regex filter for log lines")
+	cmd.Flags().StringVar(&color, "color", "auto", "Color output: auto, on, off")
 	cmd.MarkFlagRequired("service")
 	cmd.MarkPersistentFlagRequired("cluster")
 
@@ -146,6 +148,10 @@ Examples:
 		}
 		return ids, nil
 	}))
+
+	cmd.RegisterFlagCompletionFunc("color", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"auto", "on", "off"}, cobra.ShellCompDirectiveNoFileComp
+	})
 
 	return cmd
 }
