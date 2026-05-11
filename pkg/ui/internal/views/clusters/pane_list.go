@@ -50,8 +50,8 @@ type listPane struct {
 
 	// filtering parameters
 	filtering struct {
-		matched      []int   // indices referring to clusters
-		matchedRunes [][]int // matches by index to filtering.matched
+		matched      []int
+		matchedRunes [][]int
 		enabled      bool
 	}
 
@@ -210,13 +210,11 @@ func (m *listPane) Update(msg tea.Msg) tea.Cmd {
 		return cmd
 	}
 
-	// route to search when applicable
 	if search.IsSearchBoxMessage(msg) || m.search.IsFocused() {
 		cmd := m.search.Update(msg)
 		return tea.Batch(cmd, m.MaybePreviewItem(false))
 	}
 
-	// handle navigation
 	if _, isKey := msg.(tea.KeyPressMsg); isKey {
 		return m.handleKey(msg.(tea.KeyPressMsg))
 	}
@@ -246,7 +244,6 @@ func (m *listPane) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 func (m *listPane) selectCluster() tea.Cmd {
 	idx := m.content.Cursor()
-	// resolve through filter if active
 	if m.filtering.enabled {
 		if idx < 0 || idx >= len(m.filtering.matched) {
 			return nil
@@ -268,7 +265,6 @@ func (m *listPane) zoom() tea.Cmd {
 	}
 }
 
-// MaybePreviewItem sends a details message if the cursor moved.
 func (m *listPane) MaybePreviewItem(force bool) tea.Cmd {
 	if len(m.clusters) == 0 {
 		return func() tea.Msg {
@@ -276,7 +272,6 @@ func (m *listPane) MaybePreviewItem(force bool) tea.Cmd {
 		}
 	}
 	idx := m.content.Cursor()
-	// resolve through filter if active
 	if m.filtering.enabled {
 		if len(m.filtering.matched) == 0 {
 			return func() tea.Msg {
@@ -320,7 +315,6 @@ func (m *listPane) applySize(height, width int) {
 	m.updateSize()
 }
 
-// updateSize recalculates content dimensions based on current state.
 func (m *listPane) updateSize() {
 	h, w := m.window.height, m.window.width
 	searchBoxH := u.Ternary(m.search.GetHeight(), 0, m.search.IsEnabled())

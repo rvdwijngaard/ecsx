@@ -21,6 +21,11 @@ const (
 	detailsPaneID
 )
 
+var (
+	borderStyle  = styles.BorderStyle
+	focusedStyle = styles.FocusedBorderStyle
+)
+
 // View is the top-level services view with list + details panes.
 type View struct {
 	// view window
@@ -50,9 +55,11 @@ func NewView(ctx context.Context, client *ecs.Client) *View {
 	return v
 }
 
-// Load starts loading services for the given cluster.
+// Load triggers loading services for the given cluster.
 func (m *View) Load(cluster string) tea.Cmd {
-	return m.listPane.Load(cluster)
+	m.focused = listPaneID
+	m.zoomEnabled = false
+	return tea.Batch(m.listPane.load(cluster), m.detailsPane.Init())
 }
 
 func (m *View) Update(msg tea.Msg) tea.Cmd {
@@ -114,20 +121,16 @@ func (m *View) handleZoom(target paneID) tea.Cmd {
 func (m *View) applySize() {
 	w := u.Ternary(m.window.width, m.window.width/2, m.zoomEnabled)
 
-	borderStyle := styles.BorderStyle.
+	borderStyle = styles.BorderStyle.
 		Height(m.window.height - 2).
 		Width(w)
 
-	focusedStyle := styles.FocusedBorderStyle.
+	focusedStyle = styles.FocusedBorderStyle.
 		Height(m.window.height - 2).
 		Width(w)
 
-	// store for rendering
 	m.listPane.applySize(m.window.height-2-3, w-4)
 	m.detailsPane.applySize(m.window.height-2-3, w-4)
-
-	_ = borderStyle
-	_ = focusedStyle
 }
 
 func (m *View) moveFocus() {
@@ -138,20 +141,10 @@ func (m *View) moveFocus() {
 }
 
 func (m *View) renderBorder(pane paneID, content string) string {
-	w := u.Ternary(m.window.width, m.window.width/2, m.zoomEnabled)
-
-	bs := styles.BorderStyle.
-		Height(m.window.height - 2).
-		Width(w)
-
-	fs := styles.FocusedBorderStyle.
-		Height(m.window.height - 2).
-		Width(w)
-
 	if m.focused == pane {
-		return fs.Render(content)
+		return focusedStyle.Render(content)
 	}
-	return bs.Render(content)
+	return borderStyle.Render(content)
 }
 
 func (m *View) View() string {
@@ -161,13 +154,4 @@ func (m *View) View() string {
 		u.Ternary(m.renderBorder(detailsPaneID, m.detailsPane.View()), "", !m.zoomEnabled || m.zoomTarget == detailsPaneID),
 	))
 	return s.String()
-}
-
-// BackToClustersMsg signals navigation back to clusters view.
-type BackToClustersMsg struct{}
-
-// SelectServiceMsg signals a service was selected.
-type SelectServiceMsg struct {
-	Cluster     string
-	ServiceName string
 }

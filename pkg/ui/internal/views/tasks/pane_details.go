@@ -100,53 +100,37 @@ func renderTaskDetails(task *apitypes.TaskItem, st detailsStyles) string {
 
 	s := strings.Builder{}
 	fmt.Fprintf(&s, "%s\n", header("TASK"))
-	fmt.Fprintf(&s, "%s:  %s\n", field("ID"), task.ID)
-	fmt.Fprintf(&s, "%s: %s\n", field("ARN"), task.ARN)
-	fmt.Fprintf(&s, "%s:%s\n", field("Status"), statusWithColor(task.Status))
-	fmt.Fprintf(&s, "%s:  %s\n", field("Desired Status"), task.DesiredStatus)
-	fmt.Fprintf(&s, "%s:  %s\n", field("Health"), task.HealthStatus)
+	fmt.Fprintf(&s, "%s:  %s\n", field("Task ID"), task.ID)
+	fmt.Fprintf(&s, "%s:      %s\n", field("ARN"), task.ARN)
+	fmt.Fprintf(&s, "%s:   %s\n", field("Status"), task.Status)
+	fmt.Fprintf(&s, "%s:  %s\n", field("Desired"), task.DesiredStatus)
+	fmt.Fprintf(&s, "%s:   %s\n", field("Health"), task.HealthStatus)
 	fmt.Fprintf(&s, "\n")
 	fmt.Fprintf(&s, "%s\n", header("CONFIGURATION"))
-	fmt.Fprintf(&s, "%s:  %s\n", field("Task Definition"), task.TaskDefinition)
 	fmt.Fprintf(&s, "%s:  %s\n", field("Launch Type"), task.LaunchType)
-	if task.CPU != "" {
-		fmt.Fprintf(&s, "%s:  %s / %s\n", field("CPU / Memory"), task.CPU, task.Memory)
-	}
+	fmt.Fprintf(&s, "%s:  %s\n", field("Task Def"), task.TaskDefinition)
+	fmt.Fprintf(&s, "%s:      %s\n", field("CPU"), task.CPU)
+	fmt.Fprintf(&s, "%s:   %s\n", field("Memory"), task.Memory)
 	if task.StartedAt != nil {
-		fmt.Fprintf(&s, "%s:  %s\n", field("Started At"), task.StartedAt.Local().Format("2006-01-02 15:04:05"))
+		fmt.Fprintf(&s, "%s:  %s\n", field("Started"), task.StartedAt.Local().Format("2006-01-02 15:04:05"))
 	}
-	fmt.Fprintf(&s, "\n")
 
 	if len(task.Containers) > 0 {
+		fmt.Fprintf(&s, "\n")
 		fmt.Fprintf(&s, "%s\n", header("CONTAINERS"))
 		for _, c := range task.Containers {
 			fmt.Fprintf(&s, "%s:  %s\n", field("Name"), c.Name)
-			fmt.Fprintf(&s, "%s:%s\n", field("  Status"), statusWithColor(c.Status))
-			fmt.Fprintf(&s, "%s:  %s\n", field("  Image"), c.Image)
-			if c.HealthStatus != "" && c.HealthStatus != "UNKNOWN" {
-				fmt.Fprintf(&s, "%s:  %s\n", field("  Health"), c.HealthStatus)
-			}
+			fmt.Fprintf(&s, "%s:   %s\n", field("Status"), c.Status)
+			fmt.Fprintf(&s, "%s:   %s\n", field("Health"), c.HealthStatus)
+			fmt.Fprintf(&s, "%s:    %s\n", field("Image"), c.Image)
 			if c.ExitCode != nil {
-				fmt.Fprintf(&s, "%s:  %d\n", field("  Exit Code"), *c.ExitCode)
+				fmt.Fprintf(&s, "%s: %d\n", field("Exit Code"), *c.ExitCode)
 			}
 			fmt.Fprintf(&s, "\n")
 		}
 	}
 
 	return s.String()
-}
-
-func statusWithColor(status string) string {
-	switch strings.ToUpper(status) {
-	case "RUNNING", "ACTIVE":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#4CAF50")).Render(" " + status)
-	case "STOPPED", "INACTIVE", "FAILED":
-		return lipgloss.NewStyle().Foreground(styles.ErrorColour).Render(" " + status)
-	case "PENDING", "PROVISIONING":
-		return lipgloss.NewStyle().Foreground(styles.NumberColour).Render(" " + status)
-	default:
-		return " " + status
-	}
 }
 
 // Messages

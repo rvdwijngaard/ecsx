@@ -104,17 +104,19 @@ func renderServiceDetails(svc *apitypes.ServiceItem, st detailsStyles) string {
 	fmt.Fprintf(&s, "%s:   %s\n", field("ARN"), svc.ARN)
 	fmt.Fprintf(&s, "%s:%s\n", field("Status"), statusWithColor(svc.Status))
 	fmt.Fprintf(&s, "\n")
-	fmt.Fprintf(&s, "%s\n", header("DEPLOYMENT"))
-	fmt.Fprintf(&s, "%s:  %s\n", field("Task Definition"), svc.TaskDefinition)
+	fmt.Fprintf(&s, "%s\n", header("TASK DEFINITION"))
+	fmt.Fprintf(&s, "%s:  %s\n", field("Task Def"), svc.TaskDefinition)
 	fmt.Fprintf(&s, "%s:  %s\n", field("Launch Type"), svc.LaunchType)
-	if svc.CreatedAt != nil {
-		fmt.Fprintf(&s, "%s:  %s\n", field("Created At"), svc.CreatedAt.Local().Format("2006-01-02 15:04:05"))
-	}
 	fmt.Fprintf(&s, "\n")
-	fmt.Fprintf(&s, "%s\n", header("TASKS"))
+	fmt.Fprintf(&s, "%s\n", header("COUNTS"))
 	fmt.Fprintf(&s, "%s:  %d\n", field("Desired"), svc.DesiredCount)
 	fmt.Fprintf(&s, "%s:  %d\n", field("Running"), svc.RunningCount)
 	fmt.Fprintf(&s, "%s:  %d\n", field("Pending"), svc.PendingCount)
+	if svc.CreatedAt != nil {
+		fmt.Fprintf(&s, "\n")
+		fmt.Fprintf(&s, "%s\n", header("METADATA"))
+		fmt.Fprintf(&s, "%s:  %s\n", field("Created"), svc.CreatedAt.Local().Format("2006-01-02 15:04:05"))
+	}
 
 	return s.String()
 }

@@ -21,6 +21,11 @@ const (
 	detailsPaneID
 )
 
+var (
+	borderStyle  = styles.BorderStyle
+	focusedStyle = styles.FocusedBorderStyle
+)
+
 // View is the top-level tasks view with list + details panes.
 type View struct {
 	// view window
@@ -50,9 +55,11 @@ func NewView(ctx context.Context, client *ecs.Client) *View {
 	return v
 }
 
-// Load starts loading tasks for the given cluster and service.
+// Load triggers loading tasks for the given cluster and service.
 func (m *View) Load(cluster, service string) tea.Cmd {
-	return m.listPane.Load(cluster, service)
+	m.focused = listPaneID
+	m.zoomEnabled = false
+	return tea.Batch(m.listPane.load(cluster, service), m.detailsPane.Init())
 }
 
 func (m *View) Update(msg tea.Msg) tea.Cmd {
@@ -113,6 +120,15 @@ func (m *View) handleZoom(target paneID) tea.Cmd {
 
 func (m *View) applySize() {
 	w := u.Ternary(m.window.width, m.window.width/2, m.zoomEnabled)
+
+	borderStyle = styles.BorderStyle.
+		Height(m.window.height - 2).
+		Width(w)
+
+	focusedStyle = styles.FocusedBorderStyle.
+		Height(m.window.height - 2).
+		Width(w)
+
 	m.listPane.applySize(m.window.height-2-3, w-4)
 	m.detailsPane.applySize(m.window.height-2-3, w-4)
 }
@@ -125,20 +141,10 @@ func (m *View) moveFocus() {
 }
 
 func (m *View) renderBorder(pane paneID, content string) string {
-	w := u.Ternary(m.window.width, m.window.width/2, m.zoomEnabled)
-
-	bs := styles.BorderStyle.
-		Height(m.window.height - 2).
-		Width(w)
-
-	fs := styles.FocusedBorderStyle.
-		Height(m.window.height - 2).
-		Width(w)
-
 	if m.focused == pane {
-		return fs.Render(content)
+		return focusedStyle.Render(content)
 	}
-	return bs.Render(content)
+	return borderStyle.Render(content)
 }
 
 func (m *View) View() string {
@@ -148,9 +154,4 @@ func (m *View) View() string {
 		u.Ternary(m.renderBorder(detailsPaneID, m.detailsPane.View()), "", !m.zoomEnabled || m.zoomTarget == detailsPaneID),
 	))
 	return s.String()
-}
-
-// BackToServicesMsg signals navigation back to services view.
-type BackToServicesMsg struct {
-	Cluster string
 }

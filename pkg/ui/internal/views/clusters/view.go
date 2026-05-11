@@ -28,16 +28,13 @@ var (
 
 // View is the top-level clusters view with list + details panes.
 type View struct {
-	// view window
 	window struct {
 		width  int
 		height int
 	}
 
-	// key map
 	KeyMap *ViewKeyMap
 
-	// panes
 	listPane    *listPane
 	detailsPane *detailsPane
 

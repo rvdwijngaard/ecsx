@@ -25,6 +25,10 @@ type listPane struct {
 	ctx    context.Context
 	client *ecs.Client
 
+	// the cluster and service these tasks belong to
+	cluster string
+	service string
+
 	// spinner
 	spinner struct {
 		active bool
@@ -38,11 +42,6 @@ type listPane struct {
 	// error
 	err error
 
-	// state
-	cluster string
-	service string
-	tasks   []apitypes.TaskItem
-
 	// pane's view window
 	window struct {
 		width  int
@@ -54,8 +53,8 @@ type listPane struct {
 
 	// filtering parameters
 	filtering struct {
-		matched      []int
-		matchedRunes [][]int
+		matched      []int   // indices referring to tasks
+		matchedRunes [][]int // matches by index to filtering.matched
 		enabled      bool
 	}
 
@@ -64,6 +63,9 @@ type listPane struct {
 
 	// the underlying table
 	content *table.Model
+
+	// the tasks retrieved from ECS
+	tasks []apitypes.TaskItem
 
 	// index of last previewed task
 	lastPreview int
@@ -80,11 +82,10 @@ func newListPane(ctx context.Context, client *ecs.Client) *listPane {
 	{ // contents table
 		t := table.New(
 			table.WithColumns([]table.Column{
-				{Title: "Task ID", Width: 36},
+				{Title: "Task ID", Width: 38},
 				{Title: "Status", Width: 10},
 				{Title: "Health", Width: 10},
 				{Title: "Launch", Width: 10},
-				{Title: "Started", Width: 20},
 			}),
 			table.WithFocused(true),
 		)
@@ -158,10 +159,10 @@ func newListPane(ctx context.Context, client *ecs.Client) *listPane {
 	return p
 }
 
-func (m *listPane) Load(cluster, service string) tea.Cmd {
-	m.err = nil
+func (m *listPane) load(cluster, service string) tea.Cmd {
 	m.cluster = cluster
 	m.service = service
+	m.err = nil
 	m.tasks = nil
 	m.lastPreview = -1
 	m.content.SetCursor(0)
@@ -237,10 +238,12 @@ func (m *listPane) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return tea.Quit
 	case key.Matches(msg, m.KeyMap.Search):
 		return m.search.OpenSearchBox()
+	case key.Matches(msg, m.KeyMap.Esc):
+		return m.search.Reset()
 	case key.Matches(msg, m.KeyMap.Back):
-		return m.goBack()
+		return m.back()
 	case key.Matches(msg, m.KeyMap.Reload):
-		return m.Load(m.cluster, m.service)
+		return m.load(m.cluster, m.service)
 	case key.Matches(msg, m.KeyMap.Zoom):
 		return m.zoom()
 	}
@@ -248,9 +251,10 @@ func (m *listPane) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	return tea.Batch(cmd, m.MaybePreviewItem(false))
 }
 
-func (m *listPane) goBack() tea.Cmd {
+func (m *listPane) back() tea.Cmd {
+	cluster := m.cluster
 	return func() tea.Msg {
-		return BackToServicesMsg{Cluster: m.cluster}
+		return BackToServicesMsg{Cluster: cluster}
 	}
 }
 
@@ -295,16 +299,11 @@ func (m *listPane) MaybePreviewItem(force bool) tea.Cmd {
 func (m *listPane) setRows() {
 	rows := make([]table.Row, len(m.tasks))
 	for i, t := range m.tasks {
-		started := ""
-		if t.StartedAt != nil {
-			started = t.StartedAt.Local().Format("2006-01-02 15:04:05")
-		}
 		rows[i] = table.Row{
 			simpleField{t.ID},
 			simpleField{t.Status},
 			simpleField{t.HealthStatus},
 			simpleField{t.LaunchType},
-			simpleField{started},
 		}
 	}
 	m.content.SetRows(rows)
@@ -316,7 +315,6 @@ func (m *listPane) applySize(height, width int) {
 	m.updateSize()
 }
 
-// updateSize recalculates content dimensions based on current state.
 func (m *listPane) updateSize() {
 	h, w := m.window.height, m.window.width
 	searchBoxH := u.Ternary(m.search.GetHeight(), 0, m.search.IsEnabled())
@@ -345,7 +343,7 @@ func (m *listPane) noContentMessage() string {
 	}
 	s := strings.Builder{}
 	fmt.Fprintf(&s, "==================================================\n")
-	fmt.Fprintf(&s, "       NO TASKS IN %s / %s\n", m.cluster, m.service)
+	fmt.Fprintf(&s, "            NO TASKS FOR THIS SERVICE              \n")
 	fmt.Fprintf(&s, "==================================================\n")
 	return s.String()
 }
@@ -361,6 +359,11 @@ type taskDetailsMsg struct {
 }
 
 type zoomToggleListPane struct{}
+
+// Exported messages consumed by home.go
+type BackToServicesMsg struct {
+	Cluster string
+}
 
 // simpleField implements table.Field
 type simpleField struct {

@@ -1,8 +1,32 @@
 package clusters
 
-import (
-	"charm.land/bubbles/v2/key"
-)
+import "charm.land/bubbles/v2/key"
+
+// DetailsPaneKeyMap defines keybindings for the cluster details pane.
+type DetailsPaneKeyMap struct {
+	Zoom key.Binding
+}
+
+func (km *DetailsPaneKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{km.Zoom}
+}
+
+func (km *DetailsPaneKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{km.Zoom},
+	}
+}
+
+func DefaultDetailsPaneKeyMap() *DetailsPaneKeyMap {
+	return &DetailsPaneKeyMap{
+		Zoom: key.NewBinding(
+			key.WithKeys("Z"),
+			key.WithHelp("shift+z", "zoom"),
+		),
+	}
+}
+
+// ------------------------------------------ //
 
 // ListPaneKeyMap defines keybindings for the cluster list pane.
 type ListPaneKeyMap struct {
@@ -53,29 +77,7 @@ func DefaultListPaneKeyMap() *ListPaneKeyMap {
 	}
 }
 
-// DetailsPaneKeyMap defines keybindings for the cluster details pane.
-type DetailsPaneKeyMap struct {
-	Zoom key.Binding
-}
-
-func (km *DetailsPaneKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{km.Zoom}
-}
-
-func (km *DetailsPaneKeyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{km.Zoom},
-	}
-}
-
-func DefaultDetailsPaneKeyMap() *DetailsPaneKeyMap {
-	return &DetailsPaneKeyMap{
-		Zoom: key.NewBinding(
-			key.WithKeys("Z"),
-			key.WithHelp("shift+z", "zoom"),
-		),
-	}
-}
+// ------------------------------------------ //
 
 // ViewKeyMap defines keybindings for the top-level clusters view.
 type ViewKeyMap struct {

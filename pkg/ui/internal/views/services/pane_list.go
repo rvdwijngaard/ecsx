@@ -25,6 +25,9 @@ type listPane struct {
 	ctx    context.Context
 	client *ecs.Client
 
+	// the cluster these services belong to
+	cluster string
+
 	// spinner
 	spinner struct {
 		active bool
@@ -38,10 +41,6 @@ type listPane struct {
 	// error
 	err error
 
-	// state
-	cluster  string
-	services []apitypes.ServiceItem
-
 	// pane's view window
 	window struct {
 		width  int
@@ -53,8 +52,8 @@ type listPane struct {
 
 	// filtering parameters
 	filtering struct {
-		matched      []int
-		matchedRunes [][]int
+		matched      []int   // indices referring to services
+		matchedRunes [][]int // matches by index to filtering.matched
 		enabled      bool
 	}
 
@@ -63,6 +62,9 @@ type listPane struct {
 
 	// the underlying table
 	content *table.Model
+
+	// the services retrieved from ECS
+	services []apitypes.ServiceItem
 
 	// index of last previewed service
 	lastPreview int
@@ -79,7 +81,7 @@ func newListPane(ctx context.Context, client *ecs.Client) *listPane {
 	{ // contents table
 		t := table.New(
 			table.WithColumns([]table.Column{
-				{Title: "Service", Width: 35},
+				{Title: "Service", Width: 36},
 				{Title: "Status", Width: 10},
 				{Title: "Desired", Width: 9},
 				{Title: "Running", Width: 9},
@@ -157,9 +159,9 @@ func newListPane(ctx context.Context, client *ecs.Client) *listPane {
 	return p
 }
 
-func (m *listPane) Load(cluster string) tea.Cmd {
-	m.err = nil
+func (m *listPane) load(cluster string) tea.Cmd {
 	m.cluster = cluster
+	m.err = nil
 	m.services = nil
 	m.lastPreview = -1
 	m.content.SetCursor(0)
@@ -234,23 +236,19 @@ func (m *listPane) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return tea.Quit
 	case key.Matches(msg, m.KeyMap.Search):
 		return m.search.OpenSearchBox()
-	case key.Matches(msg, m.KeyMap.Back):
-		return m.goBack()
+	case key.Matches(msg, m.KeyMap.Esc):
+		return m.search.Reset()
 	case key.Matches(msg, m.KeyMap.Select):
 		return m.selectService()
+	case key.Matches(msg, m.KeyMap.Back):
+		return m.back()
 	case key.Matches(msg, m.KeyMap.Reload):
-		return m.Load(m.cluster)
+		return m.load(m.cluster)
 	case key.Matches(msg, m.KeyMap.Zoom):
 		return m.zoom()
 	}
 	cmd := m.content.Update(msg)
 	return tea.Batch(cmd, m.MaybePreviewItem(false))
-}
-
-func (m *listPane) goBack() tea.Cmd {
-	return func() tea.Msg {
-		return BackToClustersMsg{}
-	}
 }
 
 func (m *listPane) selectService() tea.Cmd {
@@ -265,8 +263,15 @@ func (m *listPane) selectService() tea.Cmd {
 		return nil
 	}
 	svc := m.services[idx]
+	cluster := m.cluster
 	return func() tea.Msg {
-		return SelectServiceMsg{Cluster: m.cluster, ServiceName: svc.Name}
+		return SelectServiceMsg{Cluster: cluster, ServiceName: svc.Name}
+	}
+}
+
+func (m *listPane) back() tea.Cmd {
+	return func() tea.Msg {
+		return BackToClustersMsg{}
 	}
 }
 
@@ -302,9 +307,9 @@ func (m *listPane) MaybePreviewItem(force bool) tea.Cmd {
 	if idx < 0 || idx >= len(m.services) {
 		return nil
 	}
-	svc := m.services[idx]
+	s := m.services[idx]
 	return func() tea.Msg {
-		return serviceDetailsMsg{service: &svc}
+		return serviceDetailsMsg{service: &s}
 	}
 }
 
@@ -328,7 +333,6 @@ func (m *listPane) applySize(height, width int) {
 	m.updateSize()
 }
 
-// updateSize recalculates content dimensions based on current state.
 func (m *listPane) updateSize() {
 	h, w := m.window.height, m.window.width
 	searchBoxH := u.Ternary(m.search.GetHeight(), 0, m.search.IsEnabled())
@@ -357,7 +361,7 @@ func (m *listPane) noContentMessage() string {
 	}
 	s := strings.Builder{}
 	fmt.Fprintf(&s, "==================================================\n")
-	fmt.Fprintf(&s, "         NO SERVICES IN CLUSTER %s\n", m.cluster)
+	fmt.Fprintf(&s, "            NO SERVICES IN THIS CLUSTER            \n")
 	fmt.Fprintf(&s, "==================================================\n")
 	return s.String()
 }
@@ -373,6 +377,14 @@ type serviceDetailsMsg struct {
 }
 
 type zoomToggleListPane struct{}
+
+// Exported messages consumed by home.go
+type BackToClustersMsg struct{}
+
+type SelectServiceMsg struct {
+	Cluster     string
+	ServiceName string
+}
 
 // simpleField implements table.Field
 type simpleField struct {

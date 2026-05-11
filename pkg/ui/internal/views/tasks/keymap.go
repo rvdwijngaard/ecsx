@@ -1,52 +1,6 @@
 package tasks
 
-import (
-	"charm.land/bubbles/v2/key"
-)
-
-// ListPaneKeyMap defines keybindings for the tasks list pane.
-type ListPaneKeyMap struct {
-	Search key.Binding
-	Zoom   key.Binding
-	Reload key.Binding
-	Back   key.Binding
-	Quit   key.Binding
-}
-
-func (km *ListPaneKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{km.Search, km.Zoom, km.Reload, km.Back, km.Quit}
-}
-
-func (km *ListPaneKeyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{km.Search, km.Zoom, km.Reload, km.Back, km.Quit},
-	}
-}
-
-func DefaultListPaneKeyMap() *ListPaneKeyMap {
-	return &ListPaneKeyMap{
-		Search: key.NewBinding(
-			key.WithKeys("/"),
-			key.WithHelp("/", "search"),
-		),
-		Zoom: key.NewBinding(
-			key.WithKeys("Z"),
-			key.WithHelp("shift+z", "zoom"),
-		),
-		Reload: key.NewBinding(
-			key.WithKeys("ctrl+r"),
-			key.WithHelp("ctrl+r", "reload"),
-		),
-		Back: key.NewBinding(
-			key.WithKeys("esc"),
-			key.WithHelp("esc", "back"),
-		),
-		Quit: key.NewBinding(
-			key.WithKeys("q", "ctrl+c"),
-			key.WithHelp("q", "quit"),
-		),
-	}
-}
+import "charm.land/bubbles/v2/key"
 
 // DetailsPaneKeyMap defines keybindings for the task details pane.
 type DetailsPaneKeyMap struct {
@@ -71,6 +25,59 @@ func DefaultDetailsPaneKeyMap() *DetailsPaneKeyMap {
 		),
 	}
 }
+
+// ------------------------------------------ //
+
+// ListPaneKeyMap defines keybindings for the task list pane.
+type ListPaneKeyMap struct {
+	Search key.Binding
+	Zoom   key.Binding
+	Reload key.Binding
+	Back   key.Binding
+	Esc    key.Binding
+	Quit   key.Binding
+}
+
+func (km *ListPaneKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{km.Search, km.Zoom, km.Reload, km.Back, km.Esc, km.Quit}
+}
+
+func (km *ListPaneKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{km.Search, km.Zoom, km.Reload, km.Back, km.Esc, km.Quit},
+	}
+}
+
+func DefaultListPaneKeyMap() *ListPaneKeyMap {
+	return &ListPaneKeyMap{
+		Search: key.NewBinding(
+			key.WithKeys("/"),
+			key.WithHelp("/", "search"),
+		),
+		Zoom: key.NewBinding(
+			key.WithKeys("Z"),
+			key.WithHelp("shift+z", "zoom"),
+		),
+		Reload: key.NewBinding(
+			key.WithKeys("ctrl+r"),
+			key.WithHelp("ctrl+r", "reload"),
+		),
+		Back: key.NewBinding(
+			key.WithKeys("backspace"),
+			key.WithHelp("backspace", "back"),
+		),
+		Esc: key.NewBinding(
+			key.WithKeys("esc"),
+			key.WithHelp("esc", "cancel search"),
+		),
+		Quit: key.NewBinding(
+			key.WithKeys("q", "ctrl+c"),
+			key.WithHelp("q", "quit"),
+		),
+	}
+}
+
+// ------------------------------------------ //
 
 // ViewKeyMap defines keybindings for the top-level tasks view.
 type ViewKeyMap struct {

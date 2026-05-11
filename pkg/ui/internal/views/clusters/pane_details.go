@@ -14,18 +14,13 @@ import (
 )
 
 type detailsPane struct {
-	// pane's view window
 	window struct {
 		width  int
 		height int
 	}
 
-	// key map
-	KeyMap *DetailsPaneKeyMap
-
-	// styles
+	KeyMap  *DetailsPaneKeyMap
 	dStyles detailsStyles
-
 	content viewport.Model
 }
 

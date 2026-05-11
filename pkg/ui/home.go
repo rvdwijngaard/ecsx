@@ -3,46 +3,24 @@ package ui
 import (
 	"context"
 
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 
-	"charm.land/bubbles/v2/help"
-	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
-
 	appconfig "github.com/ron/ecsx/pkg"
-	"github.com/ron/ecsx/pkg/ui/internal/dialogs"
 	"github.com/ron/ecsx/pkg/ui/internal/messages"
-	commonstyles "github.com/ron/ecsx/pkg/ui/internal/styles"
 	"github.com/ron/ecsx/pkg/ui/internal/views/clusters"
-	clustersView "github.com/ron/ecsx/pkg/ui/internal/views/clusters"
 	"github.com/ron/ecsx/pkg/ui/internal/views/services"
 	"github.com/ron/ecsx/pkg/ui/internal/views/tasks"
 )
 
-type View int
-type Dialog int
-
-const (
-	tables_view View = iota
-	items_view
-)
-
-const (
-	help_dialog Dialog = iota
-	regions_dialog
-	mfa_dialog
-)
-
-var regionBlock = lipgloss.NewStyle().
-	Background(commonstyles.RegionBoxBg).
-	Align(lipgloss.Left, lipgloss.Top).
-	PaddingLeft(1).
-	PaddingRight(1).
-	Height(1)
-
 type Model struct {
-	// ActiveView determines tea.Msg forwarding
-	activeView View
+	ctx    context.Context
+	cfg    appconfig.Config
+	client *ecs.Client
+
+	activeView messages.View
 
 	KeyMap KeyMap
 
@@ -51,65 +29,44 @@ type Model struct {
 		height int
 	}
 
-	// dialogs
-	dialogs struct {
-		open   bool
-		help   *dialogs.Help
-		region *dialogs.Regions
-		mfa    *dialogs.MFA
-		active Dialog
-
-		notification []*dialogs.NotificationDialog
-	}
-
-	// top-level context
-	ctx context.Context
-
-	// shared config
-	config *appconfig.Config
-
 	// views
-	clusterSelection *clustersView.ItemSelection
-	// itemselection  *itemsview.ItemSelection
+	clusters *clusters.View
+	services *services.View
+	tasks    *tasks.View
 
-	// help
-	Help help.Model
-
-	// additional options
-	options options
+	// if set, skip cluster selection and go straight to services
+	initCluster string
 }
 
-type options struct {
-	InitialError error
-}
+type Option func(*Model)
 
-type Option func(*options)
-
-func WithInitialErrorNotification(err error) Option {
-	return func(o *options) {
-		o.InitialError = err
+func WithInitialCluster(cluster string) Option {
+	return func(m *Model) {
+		m.initCluster = cluster
 	}
 }
 
 func NewModel(ctx context.Context, cfg appconfig.Config, client *ecs.Client, opts ...Option) Model {
 	m := Model{
-		ctx:         ctx,
-		cfg:         cfg,
-		client:      client,
-		activeView:  messages.ClusterSelection,
-		clusters:    clusters.NewView(ctx, client),
-		services:    services.NewView(ctx, client),
-		tasks:       tasks.NewView(ctx, client),
-		initCluster: cfg.Cluster,
+		ctx:        ctx,
+		cfg:        cfg,
+		client:     client,
+		activeView: messages.ClusterSelection,
+		KeyMap:     DefaultKeyMap(),
+		clusters:   clusters.NewView(ctx, client),
+		services:   services.NewView(ctx, client),
+		tasks:      tasks.NewView(ctx, client),
 	}
 	for _, opt := range opts {
 		opt(&m)
+	}
+	if m.cfg.Cluster != "" {
+		m.initCluster = m.cfg.Cluster
 	}
 	return m
 }
 
 func (m Model) Init() tea.Cmd {
-	// If a cluster was provided via flag, skip straight to services.
 	if m.initCluster != "" {
 		m.activeView = messages.ServiceSelection
 		return m.services.Load(m.initCluster)
@@ -119,10 +76,14 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		if key.Matches(msg, m.KeyMap.ForceQuit) {
+			return m, tea.Quit
+		}
 	case tea.WindowSizeMsg:
 		m.window.width = msg.Width
 		m.window.height = msg.Height
-		return m, m.forward(msg)
+		return m, m.broadcast(msg)
 
 	case messages.SelectCluster:
 		m.activeView = messages.ServiceSelection
@@ -141,19 +102,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.services.Load(msg.Cluster)
 	}
 
-	return m, m.forward(msg)
+	return m, m.routeToActive(msg)
 }
 
-func (m Model) forward(msg tea.Msg) tea.Cmd {
-	switch msg.(type) {
-	case tea.WindowSizeMsg:
-		return m.broadcast(msg)
-	default:
-		return m.routeToActiveOnly(msg)
-	}
-}
-
-func (m Model) routeToActiveOnly(msg tea.Msg) tea.Cmd {
+func (m Model) routeToActive(msg tea.Msg) tea.Cmd {
 	switch m.activeView {
 	case messages.ClusterSelection:
 		return m.clusters.Update(msg)
