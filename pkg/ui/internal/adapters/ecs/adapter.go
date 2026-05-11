@@ -1,0 +1,24 @@
+// Package ecs adapts ECS connector responses for UI display.
+package ecs
+
+import (
+	"context"
+
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
+
+	connector "github.com/ron/ecsx/pkg/aws/ecs"
+	apitypes "github.com/ron/ecsx/pkg/ui/internal/adapters/ecs/types"
+)
+
+// ListClusters calls the ECS connector and transforms the result for UI display.
+func ListClusters(client *ecs.Client, ctx context.Context) ([]apitypes.ClusterItem, error) {
+	clusters, err := connector.ListClusters(client, ctx)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]apitypes.ClusterItem, len(clusters))
+	for i, c := range clusters {
+		items[i] = apitypes.ClusterFromConnector(c)
+	}
+	return items, nil
+}

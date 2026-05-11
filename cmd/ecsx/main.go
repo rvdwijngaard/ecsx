@@ -1,21 +1,17 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"os/signal"
-	"time"
+	"path/filepath"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 
-	ecsaws "github.com/ron/ecsx/internal/aws"
-	"github.com/ron/ecsx/internal/debug"
-	ecsexec "github.com/ron/ecsx/internal/exec"
-	"github.com/ron/ecsx/internal/logs"
-	"github.com/ron/ecsx/internal/ssm"
-	"github.com/ron/ecsx/internal/ui"
+	appconfig "github.com/ron/ecsx/pkg"
+	pkgaws "github.com/ron/ecsx/pkg/aws"
+	"github.com/ron/ecsx/pkg/aws/ecs"
+	"github.com/ron/ecsx/pkg/ui"
 )
 
 var (
@@ -24,43 +20,51 @@ var (
 	region  string
 	cluster string
 	verbose bool
+	cfgPath string
 )
+
+const (
+	aws_profile_key = "aws_profile"
+	config_key      = "config"
+	region_key      = "region"
+	cluster_key     = "cluster"
+
+	corrupt_config_dir = "<config_dir_not_found>"
+)
+
+var configDir string
+
+func init() {
+	var err error
+	configDir, err = os.UserConfigDir()
+	if err != nil {
+		configDir = corrupt_config_dir
+	}
+}
 
 func main() {
 	root := &cobra.Command{
-		Use:     "ecsx",
-		Short:   "ECS terminal UI and log tailer",
-		Version: version,
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			if verbose {
-				debug.Enable()
-			}
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			debug.Log("creating AWS client (profile=%q region=%q)", profile, region)
-			client, err := ecsaws.NewCachedClient(profile, region)
-			if err != nil {
-				return err
-			}
-			debug.Log("AWS client created, starting TUI (cluster=%q)", cluster)
-			p := tea.NewProgram(ui.New(client, cluster))
-			_, err = p.Run()
-			return err
-		},
+		Use:          "ecsx",
+		Short:        "ECS terminal UI and log tailer",
+		Version:      version,
 		SilenceUsage: true,
+		RunE:         runApplication,
 	}
 
-	root.PersistentFlags().StringVarP(&profile, "profile", "p", "", "AWS profile")
-	root.PersistentFlags().StringVarP(&region, "region", "r", "", "AWS region")
-	root.PersistentFlags().StringVarP(&cluster, "cluster", "c", "", "ECS cluster name")
+	root.PersistentFlags().StringVarP(&profile, aws_profile_key, "p", "", "AWS profile")
+	root.PersistentFlags().StringVarP(&region, region_key, "r", "", "AWS region")
+	root.PersistentFlags().StringVarP(&cfgPath, config_key, "c", filepath.Join(configDir, "ecsx/config.yaml"), "path to config file (relative or absolute); must be yaml")
+	root.PersistentFlags().StringVar(&cluster, cluster_key, "", "ECS cluster name")
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable debug logging")
-	root.RegisterFlagCompletionFunc("cluster", completeClusters)
 
-	root.AddCommand(logsCmd())
-	root.AddCommand(ssmCmd())
-	root.AddCommand(execCmd())
-	root.AddCommand(taskCmd())
-	root.AddCommand(containerEnvCmd())
+	root.RegisterFlagCompletionFunc(cluster_key, completeClusters)
+
+	// TODO: re-enable subcommands once migrated to pkg/ connectors
+	// root.AddCommand(logsCmd())
+	// root.AddCommand(ssmCmd())
+	// root.AddCommand(execCmd())
+	// root.AddCommand(taskCmd())
+	// root.AddCommand(containerEnvCmd())
 	root.AddCommand(completionCmd())
 
 	if err := root.Execute(); err != nil {
@@ -68,357 +72,71 @@ func main() {
 	}
 }
 
-func logsCmd() *cobra.Command {
-	var service, task, filter, grep, container, color string
-	var follow, streamName, groupName, timestamp, eventID bool
-	var start, end logs.TimeFlag
-	start.Default(1 * time.Hour)
+func runApplication(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
 
-	cmd := &cobra.Command{
-		Use:   "logs",
-		Short: "Tail ECS service logs",
-		Long: `Tail ECS service logs from CloudWatch.
+	var uiopts []ui.Option
 
-Two filtering modes are available:
+	// Resolve profile: flag → env → default (nil)
+	resolvedProfile := resolveProfile()
 
-  -f  Server-side CloudWatch filter pattern. Reduces data sent from AWS.
-  -G  Client-side regex applied after receiving logs. Supports full Go
-      regexp syntax including case-insensitive matching with (?i).
+	// Resolve region: flag → env → default
+	resolvedRegion := resolveRegion()
 
-Examples:
-  ecsx logs -c my-cluster -s my-service -G "ERROR|WARN"
-  ecsx logs -c my-cluster -s my-service -G "duration=[0-9]{4,}ms"
-  ecsx logs -c my-cluster -s my-service -G "HTTP/[0-9.]+ 5[0-9]{2}"
-  ecsx logs -c my-cluster -s my-service -G "(?i)timeout|deadline"
-  ecsx logs -c my-cluster -s my-service -f "ERROR" -G "database|connection"`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := ecsaws.NewClient(profile, region)
-			if err != nil {
-				return err
-			}
-			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
-			defer cancel()
-			return logs.Tail(ctx, client, logs.Options{
-				Cluster:    cluster,
-				Service:    service,
-				Task:       task,
-				Container:  container,
-				Filter:     filter,
-				Follow:     follow,
-				StreamName: streamName,
-				GroupName:  groupName,
-				Timestamp:  timestamp,
-				EventID:    eventID,
-				Start:      start.Time(),
-				End:        end.TimePtr(),
-				Grep:       grep,
-				Color:      color,
-			})
-		},
-		SilenceUsage: true,
+	// Set up credentials channel for MFA token provider
+	credsC := make(chan appconfig.CredentialsResponse, 1)
+	var p *tea.Program
+	mfaCB := func() (string, error) {
+		p.Send(appconfig.CredentialsRequest{})
+		resp := <-credsC
+		return resp.Token, resp.Error
 	}
 
-	cmd.Flags().StringVarP(&service, "service", "s", "", "ECS service name (required)")
-	cmd.Flags().StringVarP(&task, "task", "t", "", "Filter to specific task ID")
-	cmd.Flags().StringVarP(&container, "container", "u", "", "Target a specific container's log group")
-	cmd.Flags().StringVarP(&filter, "filter", "f", "", "CloudWatch filter pattern")
-	cmd.Flags().BoolVarP(&follow, "follow", "F", true, "Follow log output (use --no-follow to dump and exit)")
-	cmd.Flags().BoolVarP(&streamName, "stream-name", "n", false, "Print the log stream name per line")
-	cmd.Flags().BoolVarP(&groupName, "group-name", "g", false, "Print the log group name per line")
-	cmd.Flags().BoolVarP(&timestamp, "timestamp", "T", false, "Print the event timestamp")
-	cmd.Flags().BoolVarP(&eventID, "event-id", "i", false, "Print the event ID")
-	cmd.Flags().VarP(&start, "start", "b", "Start time: duration (2h30m) or datetime (2024-01-15T09:00)")
-	cmd.Flags().VarP(&end, "end", "e", "End time: duration (30m) or datetime (2024-01-15T10:00)")
-	cmd.Flags().StringVarP(&grep, "grep", "G", "", "Client-side regex filter for log lines")
-	cmd.Flags().StringVar(&color, "color", "auto", "Color output: auto, on, off")
-	cmd.MarkFlagRequired("service")
-	cmd.MarkPersistentFlagRequired("cluster")
+	cfg := appconfig.Config{
+		Profile:         resolvedProfile,
+		Region:          resolvedRegion,
+		Cluster:         cluster,
+		Verbose:         verbose,
+		MFACredentialCB: mfaCB,
+		MFACredentialC:  credsC,
+	}
 
-	cmd.RegisterFlagCompletionFunc("service", completeWith(func(ctx context.Context, client *ecsaws.Client) ([]string, error) {
-		return client.ListServiceNames(ctx, cluster)
-	}))
-	cmd.RegisterFlagCompletionFunc("task", completeWith(func(ctx context.Context, client *ecsaws.Client) ([]string, error) {
-		tasks, err := client.ListTasks(ctx, cluster, service)
-		if err != nil {
-			return nil, err
-		}
-		ids := make([]string, len(tasks))
-		for i, t := range tasks {
-			ids[i] = t.ID
-		}
-		return ids, nil
-	}))
+	// Load AWS config
+	profileStr := ""
+	if cfg.Profile != nil {
+		profileStr = *cfg.Profile
+	}
+	awsCfg, err := pkgaws.LoadConfig(ctx, cfg.Region, profileStr)
+	if err != nil {
+		return fmt.Errorf("failed to load AWS config: %w", err)
+	}
 
-	cmd.RegisterFlagCompletionFunc("color", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return []string{"auto", "on", "off"}, cobra.ShellCompDirectiveNoFileComp
-	})
+	// Create ECS client
+	ecsClient := ecs.NewClient(awsCfg, profileStr)
 
-	return cmd
+	p = tea.NewProgram(ui.NewModel(ctx, cfg, ecsClient.ECS, uiopts...))
+	_, err = p.Run()
+	return err
 }
 
-func ssmCmd() *cobra.Command {
-	var service, instance string
-
-	cmd := &cobra.Command{
-		Use:   "ssm",
-		Short: "Start an SSM session on an EC2 container instance",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := ecsaws.NewClient(profile, region)
-			if err != nil {
-				return err
-			}
-			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
-			defer cancel()
-			return ssm.Connect(ctx, client, cluster, service, instance, client.Region(), profile)
-		},
-		SilenceUsage: true,
+func resolveProfile() *string {
+	if profile != "" {
+		return &profile
 	}
-
-	cmd.Flags().StringVarP(&service, "service", "s", "", "ECS service (resolve instance from its tasks)")
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "EC2 instance ID (connect directly)")
-	cmd.MarkPersistentFlagRequired("cluster")
-
-	cmd.RegisterFlagCompletionFunc("service", completeWith(func(ctx context.Context, client *ecsaws.Client) ([]string, error) {
-		return client.ListServiceNames(ctx, cluster)
-	}))
-
-	return cmd
+	if p := os.Getenv("AWS_PROFILE"); p != "" {
+		return &p
+	}
+	return nil
 }
 
-func execCmd() *cobra.Command {
-	var service, task, container, command string
-
-	cmd := &cobra.Command{
-		Use:   "exec",
-		Short: "Execute a command in a running ECS container",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := ecsaws.NewClient(profile, region)
-			if err != nil {
-				return err
-			}
-			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
-			defer cancel()
-			return ecsexec.Connect(ctx, client, cluster, service, task, container, command, client.Region(), profile)
-		},
-		SilenceUsage: true,
+func resolveRegion() string {
+	if region != "" {
+		return region
 	}
-
-	cmd.Flags().StringVarP(&service, "service", "s", "", "ECS service name")
-	cmd.Flags().StringVarP(&task, "task", "t", "", "Task ARN or ID")
-	cmd.Flags().StringVarP(&container, "container", "u", "", "Container name (defaults to first if only one)")
-	cmd.Flags().StringVar(&command, "cmd", "/bin/sh", "Command to run")
-	cmd.MarkPersistentFlagRequired("cluster")
-
-	cmd.RegisterFlagCompletionFunc("service", completeWith(func(ctx context.Context, client *ecsaws.Client) ([]string, error) {
-		return client.ListServiceNames(ctx, cluster)
-	}))
-
-	return cmd
-}
-
-func taskCmd() *cobra.Command {
-	var service, task string
-
-	cmd := &cobra.Command{
-		Use:   "task",
-		Short: "Describe a task (or an arbitrary task from a service)",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if service == "" && task == "" {
-				return fmt.Errorf("provide --service or --task")
-			}
-			client, err := ecsaws.NewClient(profile, region)
-			if err != nil {
-				return err
-			}
-			ctx := cmd.Context()
-
-			var tasks []ecsaws.Task
-			if service != "" {
-				tasks, err = client.ListTasks(ctx, cluster, service)
-				if err != nil {
-					return err
-				}
-				if task != "" {
-					for _, t := range tasks {
-						if t.ID == task || t.ARN == task {
-							tasks = []ecsaws.Task{t}
-							break
-						}
-					}
-				}
-			}
-			if len(tasks) == 0 {
-				return fmt.Errorf("no tasks found")
-			}
-
-			// Resolve EC2 instance IDs
-			if ec2Map, err := client.ResolveTaskEC2Instances(ctx, cluster, tasks); err == nil {
-				for i := range tasks {
-					if id, ok := ec2Map[tasks[i].ContainerInstanceID]; ok {
-						tasks[i].EC2InstanceID = id
-					}
-				}
-			}
-
-			t := tasks[0]
-			fmt.Printf("Task:            %s\n", t.ID)
-			fmt.Printf("ARN:             %s\n", t.ARN)
-			fmt.Printf("Status:          %s\n", t.Status)
-			fmt.Printf("Desired Status:  %s\n", t.DesiredStatus)
-			fmt.Printf("Health:          %s\n", t.HealthStatus)
-			fmt.Printf("Launch Type:     %s\n", t.LaunchType)
-			fmt.Printf("Task Definition: %s\n", t.TaskDefinition)
-			if t.CPU != "" {
-				fmt.Printf("CPU / Memory:    %s / %s\n", t.CPU, t.Memory)
-			}
-			if t.StartedAt != nil {
-				fmt.Printf("Started At:      %s\n", t.StartedAt.Local().Format(time.RFC3339))
-			}
-			if t.StoppedAt != nil {
-				fmt.Printf("Stopped At:      %s\n", t.StoppedAt.Local().Format(time.RFC3339))
-			}
-			if t.StoppedReason != "" {
-				fmt.Printf("Stopped Reason:  %s\n", t.StoppedReason)
-			}
-			if t.EC2InstanceID != "" {
-				fmt.Printf("EC2 Instance:    %s\n", t.EC2InstanceID)
-			}
-			if t.PrivateIP != "" {
-				fmt.Printf("Private IP:      %s\n", t.PrivateIP)
-			}
-			if t.PublicIP != "" {
-				fmt.Printf("Public IP:       %s\n", t.PublicIP)
-			}
-			for _, c := range t.Containers {
-				fmt.Printf("\nContainer: %s\n", c.Name)
-				fmt.Printf("  Status: %s\n", c.Status)
-				fmt.Printf("  Image:  %s\n", c.Image)
-				if c.HealthStatus != "" && c.HealthStatus != "UNKNOWN" {
-					fmt.Printf("  Health: %s\n", c.HealthStatus)
-				}
-				if c.ExitCode != nil {
-					fmt.Printf("  Exit:   %d\n", *c.ExitCode)
-				}
-			}
-			return nil
-		},
-		SilenceUsage: true,
+	if r := os.Getenv("AWS_REGION"); r != "" {
+		return r
 	}
-
-	cmd.Flags().StringVarP(&service, "service", "s", "", "ECS service name")
-	cmd.Flags().StringVarP(&task, "task", "t", "", "Task ID or ARN")
-	cmd.MarkPersistentFlagRequired("cluster")
-	cmd.RegisterFlagCompletionFunc("service", completeWith(func(ctx context.Context, client *ecsaws.Client) ([]string, error) {
-		return client.ListServiceNames(ctx, cluster)
-	}))
-	cmd.RegisterFlagCompletionFunc("task", completeWith(func(ctx context.Context, client *ecsaws.Client) ([]string, error) {
-		tasks, err := client.ListTasks(ctx, cluster, service)
-		if err != nil {
-			return nil, err
-		}
-		ids := make([]string, len(tasks))
-		for i, t := range tasks {
-			ids[i] = t.ID
-		}
-		return ids, nil
-	}))
-	return cmd
-}
-
-func containerEnvCmd() *cobra.Command {
-	var service, container, format string
-
-	cmd := &cobra.Command{
-		Use:   "container-env",
-		Short: "List environment variables for a service's containers",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := ecsaws.NewClient(profile, region)
-			if err != nil {
-				return err
-			}
-			ctx := cmd.Context()
-
-			svc, err := client.DescribeService(ctx, cluster, service)
-			if err != nil {
-				return err
-			}
-			defs, err := client.DescribeTaskDefinition(ctx, svc.TaskDefinition)
-			if err != nil {
-				return err
-			}
-
-			for _, cd := range defs {
-				if container != "" && cd.Name != container {
-					continue
-				}
-				switch format {
-				case "export", "shell":
-					for _, ev := range cd.EnvVars {
-						fmt.Printf("export %s=%q\n", ev.Name, ev.Value)
-					}
-				case "docker":
-					for _, ev := range cd.EnvVars {
-						fmt.Printf("-e %s=%s\n", ev.Name, ev.Value)
-					}
-				default: // table
-					if len(defs) > 1 {
-						fmt.Printf("# %s\n", cd.Name)
-					}
-					maxLen := 0
-					for _, ev := range cd.EnvVars {
-						if len(ev.Name) > maxLen {
-							maxLen = len(ev.Name)
-						}
-					}
-					for _, ev := range cd.EnvVars {
-						fmt.Printf("%-*s  %s\n", maxLen, ev.Name, ev.Value)
-					}
-					if len(defs) > 1 {
-						fmt.Println()
-					}
-				}
-			}
-			return nil
-		},
-		SilenceUsage: true,
-	}
-
-	cmd.Flags().StringVarP(&service, "service", "s", "", "ECS service name (required)")
-	cmd.Flags().StringVar(&container, "container", "", "Filter to a specific container")
-	cmd.Flags().StringVar(&format, "format", "table", "Output format: table, export, shell, docker")
-	cmd.MarkFlagRequired("service")
-	cmd.MarkPersistentFlagRequired("cluster")
-	cmd.RegisterFlagCompletionFunc("service", completeWith(func(ctx context.Context, client *ecsaws.Client) ([]string, error) {
-		return client.ListServiceNames(ctx, cluster)
-	}))
-	cmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return []string{"table", "export", "shell", "docker"}, cobra.ShellCompDirectiveNoFileComp
-	})
-	cmd.RegisterFlagCompletionFunc("container", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		if cluster == "" || service == "" {
-			return nil, cobra.ShellCompDirectiveNoFileComp
-		}
-		client, err := ecsaws.NewClient(profile, region)
-		if err != nil {
-			return nil, cobra.ShellCompDirectiveError
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		svc, err := client.DescribeService(ctx, cluster, service)
-		if err != nil {
-			return nil, cobra.ShellCompDirectiveError
-		}
-		defs, err := client.DescribeTaskDefinition(ctx, svc.TaskDefinition)
-		if err != nil {
-			return nil, cobra.ShellCompDirectiveError
-		}
-		names := make([]string, len(defs))
-		for i, d := range defs {
-			names[i] = d.Name
-		}
-		return names, cobra.ShellCompDirectiveNoFileComp
-	})
-	return cmd
+	return "us-east-1"
 }
 
 func completionCmd() *cobra.Command {

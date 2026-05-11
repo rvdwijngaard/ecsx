@@ -1,0 +1,32 @@
+{
+  "name": "bubbletea",
+  "description": "Bubble Tea TUI development assistant — Charm ecosystem expert for Go terminal UIs",
+  "prompt": "file://.kiro/agents/bubbletea-prompt.md",
+  "tools": [
+    "fs_read",
+    "fs_write",
+    "execute_bash",
+    "grep",
+    "glob",
+    "code"
+  ],
+  "allowedTools": [
+    "fs_read",
+    "grep",
+    "glob"
+  ],
+  "resources": [
+    "file://**/*.go",
+    "file://go.mod",
+    "file://go.sum"
+  ],
+  "hooks": {
+    "agentSpawn": [
+      {
+        "command": "go version 2>/dev/null && echo '---' && head -5 go.mod 2>/dev/null || echo 'No go.mod found'"
+      }
+    ]
+  },
+  "keyboardShortcut": "ctrl+shift+b",
+  "welcomeMessage": "Bubble Tea agent ready. What are we building?"
+}
