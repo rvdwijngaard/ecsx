@@ -5,6 +5,7 @@ import (
 
 	dynamodbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
+	cwltypes "github.com/ron/ecsx/pkg/ui/internal/adapters/cloudwatchlogs/types"
 	apitypes "github.com/ron/ecsx/pkg/ui/internal/adapters/dynamodb/types"
 	apitypes2 "github.com/ron/ecsx/pkg/ui/internal/adapters/ecs/types"
 )
@@ -17,6 +18,7 @@ const (
 	Item_selection
 	Service_selection
 	Task_selection
+	Logs_view
 )
 const (
 	ScanMode ItemsQueryMode = iota
@@ -258,3 +260,21 @@ type SwitchQueryMode struct {
 }
 
 type CopyItem struct{}
+
+// --- Logs view messages ---
+
+type OpenLogs struct {
+	Cluster   string
+	Service   string
+	Container string // empty = pick first available
+}
+
+type CloseLogs struct{}
+
+type LogBatch struct {
+	Lines []cwltypes.FormattedLogLine
+}
+
+type LogTailError struct {
+	Err error
+}

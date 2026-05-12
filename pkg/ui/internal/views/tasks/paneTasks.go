@@ -358,6 +358,8 @@ func (m *taskSelectionPane) handleNavigation(msg tea.Msg) tea.Cmd {
 			return m.reload()
 		case key.Matches(msg, m.KeyMap.Copy):
 			return m.copy()
+		case key.Matches(msg, m.KeyMap.Logs):
+			return m.openLogs()
 		default:
 			if match, call := m.AddKeyMap.Matches(msg); match {
 				return call
@@ -429,6 +431,22 @@ func (m *taskSelectionPane) copy() tea.Cmd {
 		}
 	}
 	return notifyCopySuccess
+}
+
+// openLogs emits an OpenLogs message for the current service.
+func (m *taskSelectionPane) openLogs() tea.Cmd {
+	if m.clusterName == "" || m.serviceName == "" {
+		return nil
+	}
+	cluster := m.clusterName
+	service := m.serviceName
+	return func() tea.Msg {
+		return messages.OpenLogs{
+			Cluster:   cluster,
+			Service:   service,
+			Container: "", // pick first available
+		}
+	}
 }
 
 // MaybePreviewTask sends a TaskDetails message for the currently selected task.

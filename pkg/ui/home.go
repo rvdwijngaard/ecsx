@@ -14,6 +14,7 @@ import (
 
 	appconfig "github.com/ron/ecsx/pkg"
 	"github.com/ron/ecsx/pkg/aws"
+	cwlconnector "github.com/ron/ecsx/pkg/aws/cloudwatchlogs"
 	"github.com/ron/ecsx/pkg/aws/dynamodb"
 	ecsconnector "github.com/ron/ecsx/pkg/aws/ecs"
 	"github.com/ron/ecsx/pkg/ui/internal/dialogs"
@@ -21,6 +22,7 @@ import (
 	commonstyles "github.com/ron/ecsx/pkg/ui/internal/styles"
 	clustersview "github.com/ron/ecsx/pkg/ui/internal/views/clusters"
 	itemsview "github.com/ron/ecsx/pkg/ui/internal/views/items"
+	logsview "github.com/ron/ecsx/pkg/ui/internal/views/logs"
 	servicesview "github.com/ron/ecsx/pkg/ui/internal/views/services"
 	tasksview "github.com/ron/ecsx/pkg/ui/internal/views/tasks"
 	"github.com/ron/ecsx/pkg/ui/internal/views/util/keymaps"
@@ -35,6 +37,7 @@ const (
 	items_view
 	services_view
 	tasks_view
+	logs_view
 )
 
 const (
@@ -102,6 +105,7 @@ type Model struct {
 	itemselection     *itemsview.ItemSelection
 	serviceSelection  *servicesview.ServiceSelection
 	taskSelection     *tasksview.TaskSelection
+	logsView          *logsview.LogsView
 
 	// help
 	Help help.Model
@@ -156,6 +160,7 @@ func NewModel(ctx context.Context, cfg appconfig.Config, opts ...Option) Model {
 		m.itemselection = itemsview.NewItemSelectionView(ctx, &cfg, itemsview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
 		m.serviceSelection = servicesview.NewServiceSelectionView(ctx, &cfg, servicesview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
 		m.taskSelection = tasksview.NewTaskSelectionView(ctx, &cfg, tasksview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
+		m.logsView = logsview.NewLogsView(&cfg, logsview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
 	}
 
 	{ // cluster view bound dialogs
@@ -195,6 +200,7 @@ func (m Model) Init() tea.Cmd {
 	// set and reinitialise
 	m.config.Client = dynamodb.NewClient(cfg, m.config.URL)
 	m.config.ECSClient = ecsconnector.NewClient(cfg, u.IfNotNil(m.config.Profile, "")).ECS
+	m.config.CloudWatchLogsClient = cwlconnector.NewClient(cfg).Logs
 	cmds = append(cmds, m.clusterSelection.Init())
 	cmds = append(cmds, m.itemselection.Init())
 	cmds = append(cmds, m.serviceSelection.Init())
@@ -249,6 +255,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m, cmd = m.switchRegion(msg.OldRegion, msg.NewRegion)
 	case messages.SwitchQueryMode:
 		m, cmd = m.SwitchQueryMode(msg)
+	case messages.OpenLogs:
+		m.activeView = logs_view
+		m.logsView.ApplySize(m.window.height-1, m.window.width)
+		cmd = m.logsView.Update(msg)
 	}
 
 	var fwdCmd tea.Cmd
@@ -274,6 +284,7 @@ func (m Model) broadcast(msg tea.Msg) (Model, tea.Cmd) {
 	cmds = append(cmds, m.itemselection.Update(msg))
 	cmds = append(cmds, m.serviceSelection.Update(msg))
 	cmds = append(cmds, m.taskSelection.Update(msg))
+	cmds = append(cmds, m.logsView.Update(msg))
 
 	// dialogs
 	cmds = append(cmds, m.dialogs.help.Update(msg))
@@ -322,6 +333,8 @@ func (m Model) routeToActiveOnly(msg tea.Msg) (Model, tea.Cmd) {
 		return m, m.serviceSelection.Update(msg)
 	case tasks_view:
 		return m, m.taskSelection.Update(msg)
+	case logs_view:
+		return m, m.logsView.Update(msg)
 	default:
 		log.Fatalf("could not identify active view '%d'", int(m.activeView))
 	}
@@ -362,6 +375,8 @@ func (m Model) handleSwitchView(msg messages.SwitchView) (Model, tea.Cmd) {
 		m.activeView = services_view
 	case messages.Task_selection:
 		m.activeView = tasks_view
+	case messages.Logs_view:
+		m.activeView = logs_view
 	}
 	return m, m.dialogs.help.Update(msg)
 }
@@ -505,6 +520,9 @@ func (m Model) View() tea.View {
 	case tasks_view:
 		page = m.taskSelection.View()
 		help = m.Help.ShortHelpView(m.taskSelection.ShortHelp())
+	case logs_view:
+		page = m.logsView.View()
+		help = m.Help.ShortHelpView(m.logsView.ShortHelp())
 	}
 
 	// assemble gutter
