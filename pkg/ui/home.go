@@ -19,6 +19,7 @@ import (
 	ecsconnector "github.com/ron/ecsx/pkg/aws/ecs"
 	"github.com/ron/ecsx/pkg/ui/internal/dialogs"
 	"github.com/ron/ecsx/pkg/ui/internal/messages"
+	cwladapter "github.com/ron/ecsx/pkg/ui/internal/adapters/cloudwatchlogs"
 	commonstyles "github.com/ron/ecsx/pkg/ui/internal/styles"
 	clustersview "github.com/ron/ecsx/pkg/ui/internal/views/clusters"
 	itemsview "github.com/ron/ecsx/pkg/ui/internal/views/items"
@@ -49,6 +50,7 @@ const (
 	query_param_dialog
 	copy_dialog
 	mfa_dialog
+	container_picker_dialog
 )
 
 var regionBlock = lipgloss.NewStyle().
@@ -89,6 +91,7 @@ type Model struct {
 		queryParams      *dialogs.Queryialog
 		copy             *dialogs.CopyDialog
 		mfa              *dialogs.MFA
+		containerPicker  *dialogs.ContainerPicker
 		active           Dialog
 
 		notification []*dialogs.NotificationDialog
@@ -153,6 +156,10 @@ func NewModel(ctx context.Context, cfg appconfig.Config, opts ...Option) Model {
 
 	{ // mfa dialog
 		m.dialogs.mfa = dialogs.NewMFADialog(cfg.MFACredentialC)
+	}
+
+	{ // container picker dialog
+		m.dialogs.containerPicker = dialogs.NewContainerPicker()
 	}
 
 	{ // views
@@ -256,9 +263,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case messages.SwitchQueryMode:
 		m, cmd = m.SwitchQueryMode(msg)
 	case messages.OpenLogs:
-		m.activeView = logs_view
-		m.logsView.ApplySize(m.window.height-1, m.window.width)
-		cmd = m.logsView.Update(msg)
+		if msg.Container != "" {
+			// Container already selected, go directly to logs
+			m.activeView = logs_view
+			m.logsView.ApplySize(m.window.height-1, m.window.width)
+			cmd = m.logsView.Update(msg)
+		} else {
+			// Need to resolve containers first
+			cmd = m.resolveContainers(msg.Cluster, msg.Service)
+		}
+	case messages.ContainersResolved:
+		if len(msg.Containers) == 1 {
+			// Single container, skip picker
+			m.activeView = logs_view
+			m.logsView.ApplySize(m.window.height-1, m.window.width)
+			cmd = m.logsView.Update(messages.OpenLogs{
+				Cluster:   msg.Cluster,
+				Service:   msg.Service,
+				Container: msg.Containers[0],
+			})
+		} else if len(msg.Containers) > 1 {
+			// Multiple containers, show picker
+			m.dialogs.containerPicker.SetContainers(msg.Cluster, msg.Service, msg.Containers)
+			m.dialogs.open = true
+			m.dialogs.active = container_picker_dialog
+		} else {
+			cmd = func() tea.Msg {
+				return messages.ToggleNotificationDialog{
+					Error: fmt.Errorf("no log groups found for service %s", msg.Service),
+				}
+			}
+		}
+	case messages.CloseContainerPicker:
+		m.dialogs.open = false
 	}
 
 	var fwdCmd tea.Cmd
@@ -321,6 +358,8 @@ func (m Model) routeToActiveOnly(msg tea.Msg) (Model, tea.Cmd) {
 			return m, m.dialogs.copy.Update(msg)
 		case mfa_dialog:
 			return m, m.dialogs.mfa.Update(msg)
+		case container_picker_dialog:
+			return m, m.dialogs.containerPicker.Update(msg)
 		}
 	}
 
@@ -356,6 +395,33 @@ func (m Model) SwitchQueryMode(msg messages.SwitchQueryMode) (Model, tea.Cmd) {
 func (m Model) switchRegion(oldr, newr string) (Model, tea.Cmd) {
 	m.config.Region = newr
 	return m, m.Init()
+}
+
+func (m Model) resolveContainers(cluster, service string) tea.Cmd {
+	config := m.config
+	return func() tea.Msg {
+		ecsClient := config.ECSClient
+		if ecsClient == nil {
+			return messages.ToggleNotificationDialog{
+				Error: fmt.Errorf("ECS client not available"),
+			}
+		}
+		groups, err := cwladapter.ResolveLogGroups(ecsClient, context.Background(), cluster, service)
+		if err != nil {
+			return messages.ToggleNotificationDialog{
+				Error: fmt.Errorf("resolving containers: %w", err),
+			}
+		}
+		containers := make([]string, len(groups))
+		for i, g := range groups {
+			containers[i] = g.Container
+		}
+		return messages.ContainersResolved{
+			Cluster:    cluster,
+			Service:    service,
+			Containers: containers,
+		}
+	}
 }
 
 func (m Model) applySize(height, width int) tea.Model {
@@ -556,6 +622,8 @@ func (m Model) View() tea.View {
 			dialog = m.dialogs.copy
 		case mfa_dialog:
 			dialog = m.dialogs.mfa
+		case container_picker_dialog:
+			dialog = m.dialogs.containerPicker
 		}
 		renderedDialog := dialog.View()
 		dialogLayer := lipgloss.NewLayer(renderedDialog).

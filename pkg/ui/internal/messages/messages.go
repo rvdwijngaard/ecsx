@@ -278,3 +278,11 @@ type LogBatch struct {
 type LogTailError struct {
 	Err error
 }
+
+type CloseContainerPicker struct{}
+
+type ContainersResolved struct {
+	Cluster    string
+	Service    string
+	Containers []string
+}

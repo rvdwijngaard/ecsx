@@ -110,6 +110,9 @@ func (m *LogsView) Init() tea.Cmd {
 func (m *LogsView) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case messages.OpenLogs:
+		if msg.Container == "" {
+			return nil // wait for container to be resolved
+		}
 		return m.openLogs(msg)
 	case messages.LogBatch:
 		return m.handleLogBatch(msg)
