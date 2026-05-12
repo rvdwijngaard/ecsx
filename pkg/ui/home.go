@@ -16,6 +16,7 @@ import (
 
 	appconfig "github.com/ron/ecsx/pkg"
 	"github.com/ron/ecsx/pkg/aws"
+	cwconnector "github.com/ron/ecsx/pkg/aws/cloudwatch"
 	cwlconnector "github.com/ron/ecsx/pkg/aws/cloudwatchlogs"
 	"github.com/ron/ecsx/pkg/aws/dynamodb"
 	ecsconnector "github.com/ron/ecsx/pkg/aws/ecs"
@@ -221,6 +222,7 @@ func (m Model) Init() tea.Cmd {
 	m.config.Client = dynamodb.NewClient(cfg, m.config.URL)
 	m.config.ECSClient = ecsconnector.NewClient(cfg, u.IfNotNil(m.config.Profile, "")).ECS
 	m.config.CloudWatchLogsClient = cwlconnector.NewClient(cfg).Logs
+	m.config.CloudWatchClient = cwconnector.NewClient(cfg).CW
 	cmds = append(cmds, m.clusterSelection.Init())
 	cmds = append(cmds, m.itemselection.Init())
 	cmds = append(cmds, m.serviceSelection.Init())

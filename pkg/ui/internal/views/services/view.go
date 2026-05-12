@@ -20,6 +20,7 @@ type paneID int
 const (
 	servicePaneID paneID = iota
 	detailsPaneID
+	metricsPaneID
 )
 
 type ServiceSelection struct {
@@ -41,6 +42,7 @@ type ServiceSelection struct {
 	// panes
 	servicePane *serviceSelectionPane
 	detailsPane *detailsPane
+	metricsPane *metricsPane
 
 	zoomEnabled bool
 
@@ -80,12 +82,13 @@ func NewServiceSelectionView(ctx context.Context, config *appconfig.Config, opts
 
 	t.servicePane = newServiceSelectionPane(ctx, config, withServicePaneKeys(t.AddKeyMap))
 	t.detailsPane = newDetailsPane(withDetailsPaneKeys(t.AddKeyMap))
+	t.metricsPane = newMetricsPane(config)
 
 	return t
 }
 
 func (m *ServiceSelection) Init() tea.Cmd {
-	return tea.Batch(m.servicePane.Init(), m.detailsPane.Init())
+	return tea.Batch(m.servicePane.Init(), m.detailsPane.Init(), m.metricsPane.Init())
 }
 
 // Update handles the message and if it does not detect a keypress that it can
@@ -123,6 +126,7 @@ func (m ServiceSelection) broadcast(msg tea.Msg) tea.Cmd {
 	cmds := []tea.Cmd{}
 	cmds = append(cmds, m.servicePane.Update(msg))
 	cmds = append(cmds, m.detailsPane.Update(msg))
+	cmds = append(cmds, m.metricsPane.Update(msg))
 	return tea.Batch(cmds...)
 }
 
@@ -157,6 +161,12 @@ func (m *ServiceSelection) handleZoom(msg tea.Msg) tea.Cmd {
 
 func (m *ServiceSelection) applySize() {
 	w := u.Ternary(m.window.width, m.window.width/2, m.zoomEnabled)
+
+	// Right side splits between details (top) and metrics (bottom)
+	rightH := m.window.height - 2
+	metricsH := min(20, rightH/2) // metrics chart gets up to half of right pane
+	detailsH := rightH - metricsH
+
 	borderStyle = borderStyle.
 		Height(m.window.height - 2).
 		Width(w)
@@ -166,7 +176,8 @@ func (m *ServiceSelection) applySize() {
 		Width(w)
 
 	m.servicePane.applySize(m.window.height-2-3, w-4)
-	m.detailsPane.applySize(m.window.height-2-3, w-4)
+	m.detailsPane.applySize(detailsH-3, w-4)
+	m.metricsPane.applySize(metricsH-1, w-4)
 }
 
 func (m *ServiceSelection) moveFocus() {
@@ -177,10 +188,16 @@ func (m *ServiceSelection) moveFocus() {
 }
 
 func (m *ServiceSelection) View() string {
+	// Right pane: details + metrics stacked vertically
+	rightContent := lipgloss.JoinVertical(lipgloss.Left,
+		m.detailsPane.View(),
+		m.metricsPane.View(),
+	)
+
 	s := strings.Builder{}
 	s.WriteString(lipgloss.JoinHorizontal(lipgloss.Top,
 		u.Ternary(m.renderBorder(servicePaneID, m.servicePane.View()), "", !m.zoomEnabled || m.zoomtarget == servicePaneID),
-		u.Ternary(m.renderBorder(detailsPaneID, m.detailsPane.View()), "", !m.zoomEnabled || m.zoomtarget == detailsPaneID),
+		u.Ternary(m.renderBorder(detailsPaneID, rightContent), "", !m.zoomEnabled || m.zoomtarget == detailsPaneID),
 	))
 	return s.String()
 }

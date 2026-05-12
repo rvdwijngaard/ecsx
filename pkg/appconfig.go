@@ -1,6 +1,7 @@
 package appconfig
 
 import (
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
@@ -21,6 +22,7 @@ type Config struct {
 
 	Client               *dynamodb.Client
 	ECSClient            *ecs.Client
+	CloudWatchClient     *cloudwatch.Client
 	CloudWatchLogsClient *cloudwatchlogs.Client
 	// MFA credentials support
 	MFACredentialCB func() (string, error)
