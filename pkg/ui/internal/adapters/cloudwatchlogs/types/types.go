@@ -8,6 +8,7 @@ type LogConfig struct {
 	StreamPrefix     string
 	Container        string
 	LookbackDuration time.Duration
+	FilterPattern    string // CloudWatch Logs filter pattern (optional)
 }
 
 // FormattedLogLine represents a single log line ready for display.

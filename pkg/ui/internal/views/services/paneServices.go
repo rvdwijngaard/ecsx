@@ -26,6 +26,11 @@ import (
 	u "github.com/ron/ecsx/pkg/util"
 )
 
+// previewTickMsg is used to debounce service preview updates.
+type previewTickMsg struct {
+	seq int
+}
+
 type ServiceTableStyles struct {
 	SelectedBackground    color.Color
 	SearchMatchBackground color.Color
@@ -96,6 +101,9 @@ type serviceSelectionPane struct {
 
 	// index to most recently previewed service
 	lastServiceDetails int
+
+	// debounce sequence for preview
+	previewSeq int
 }
 
 type servicePaneOption func(p *serviceSelectionPane)
@@ -295,6 +303,11 @@ func (m *serviceSelectionPane) Update(msg tea.Msg) tea.Cmd {
 		return m.selectCluster(msg.ClusterName)
 	case messages.ServicePageReady:
 		return m.processServicePage(msg)
+	case previewTickMsg:
+		if msg.seq == m.previewSeq {
+			return m.emitPreview()
+		}
+		return nil
 	case spinner.TickMsg:
 		if !m.spinner.active {
 			return nil
@@ -463,7 +476,7 @@ func (m *serviceSelectionPane) copy() tea.Cmd {
 	return notifyCopySuccess
 }
 
-// MaybePreviewService sends a ServiceDetails message for the currently selected service.
+// MaybePreviewService schedules a debounced preview update for the currently selected service.
 func (m *serviceSelectionPane) MaybePreviewService(force bool) tea.Cmd {
 	if len(m.services) == 0 || (m.filtering.enabled && len(m.filtering.matchedServices) == 0) {
 		if m.lastServiceDetails == -1 && !force {
@@ -485,8 +498,29 @@ func (m *serviceSelectionPane) MaybePreviewService(force bool) tea.Cmd {
 		return nil
 	}
 	m.lastServiceDetails = idx
-	service := m.services[idx]
 
+	if force {
+		// Immediate emit (e.g. after loading services or resetting search)
+		return m.emitPreview()
+	}
+
+	// Debounced: increment sequence and schedule a tick
+	m.previewSeq++
+	seq := m.previewSeq
+	dur := m.debounceDur
+	return tea.Tick(dur, func(_ time.Time) tea.Msg {
+		return previewTickMsg{seq: seq}
+	})
+}
+
+// emitPreview sends the ServiceDetails message for the current lastServiceDetails index.
+func (m *serviceSelectionPane) emitPreview() tea.Cmd {
+	if m.lastServiceDetails < 0 || m.lastServiceDetails >= len(m.services) {
+		return func() tea.Msg {
+			return messages.ServiceDetails{Details: nil}
+		}
+	}
+	service := m.services[m.lastServiceDetails]
 	return func() tea.Msg {
 		return messages.ServiceDetails{
 			Details: &service,

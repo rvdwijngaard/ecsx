@@ -286,3 +286,26 @@ type ContainersResolved struct {
 	Service    string
 	Containers []string
 }
+
+type CloseLogsCommandEditor struct{}
+
+type RunLogsWithCommand struct {
+	Cluster       string
+	Service       string
+	Container     string
+	Command       string
+	Period        time.Duration
+	FilterPattern string
+}
+
+type OpenLogsWithEditor struct {
+	Cluster   string
+	Service   string
+	Container string
+}
+
+type ContainersResolvedForEditor struct {
+	Cluster    string
+	Service    string
+	Containers []string
+}

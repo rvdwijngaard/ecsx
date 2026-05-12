@@ -16,7 +16,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ecs v1.77.0
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/google/uuid v1.6.0
-	github.com/mattn/go-shellwords v1.0.13
 	github.com/sahilm/fuzzy v0.1.1
 	github.com/samber/hot v0.13.0
 	github.com/spf13/cobra v1.10.2

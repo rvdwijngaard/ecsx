@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	tea "charm.land/bubbletea/v2"
-
-	"github.com/mattn/go-shellwords"
 
 	cwladapter "github.com/ron/ecsx/pkg/ui/internal/adapters/cloudwatchlogs"
 	adaptertypes "github.com/ron/ecsx/pkg/ui/internal/adapters/cloudwatchlogs/types"
@@ -28,15 +27,10 @@ func OpenInExternalViewer(
 	ecsClient *ecs.Client,
 	cwlClient *cloudwatchlogs.Client,
 	cluster, service, container string,
+	period time.Duration,
+	filterPattern string,
 ) tea.Cmd {
-	args, err := shellwords.Parse(viewerCmd)
-	if err != nil || len(args) == 0 {
-		return func() tea.Msg {
-			return ExternalViewerFinishedMsg{Err: fmt.Errorf("invalid logs_viewer command: %w", err)}
-		}
-	}
-
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := exec.Command("sh", "-c", "clear; "+viewerCmd)
 
 	// Set up stdin pipe — we'll write log lines into it
 	stdinPipe, err := cmd.StdinPipe()
@@ -54,6 +48,12 @@ func OpenInExternalViewer(
 			return ExternalViewerFinishedMsg{Err: fmt.Errorf("resolving log group: %w", err)}
 		}
 	}
+
+	// Apply period and filter
+	if period > 0 {
+		logCfg.LookbackDuration = period
+	}
+	logCfg.FilterPattern = filterPattern
 
 	// Start a goroutine that streams logs into the viewer's stdin.
 	// It uses a context that gets cancelled when the pipe is closed (viewer exits).

@@ -360,6 +360,8 @@ func (m *taskSelectionPane) handleNavigation(msg tea.Msg) tea.Cmd {
 			return m.copy()
 		case key.Matches(msg, m.KeyMap.Logs):
 			return m.openLogs()
+		case key.Matches(msg, m.KeyMap.LogsCommand):
+			return m.openLogsWithEditor()
 		default:
 			if match, call := m.AddKeyMap.Matches(msg); match {
 				return call
@@ -445,6 +447,22 @@ func (m *taskSelectionPane) openLogs() tea.Cmd {
 			Cluster:   cluster,
 			Service:   service,
 			Container: "", // pick first available
+		}
+	}
+}
+
+// openLogsWithEditor emits an OpenLogsWithEditor message to show the command editor.
+func (m *taskSelectionPane) openLogsWithEditor() tea.Cmd {
+	if m.clusterName == "" || m.serviceName == "" {
+		return nil
+	}
+	cluster := m.clusterName
+	service := m.serviceName
+	return func() tea.Msg {
+		return messages.OpenLogsWithEditor{
+			Cluster:   cluster,
+			Service:   service,
+			Container: "",
 		}
 	}
 }

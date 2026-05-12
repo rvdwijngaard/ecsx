@@ -2,8 +2,10 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"os/exec"
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
@@ -51,6 +53,7 @@ const (
 	copy_dialog
 	mfa_dialog
 	container_picker_dialog
+	logs_command_dialog
 )
 
 var regionBlock = lipgloss.NewStyle().
@@ -92,6 +95,7 @@ type Model struct {
 		copy             *dialogs.CopyDialog
 		mfa              *dialogs.MFA
 		containerPicker  *dialogs.ContainerPicker
+		logsCommand      *dialogs.LogsCommandEditor
 		active           Dialog
 
 		notification []*dialogs.NotificationDialog
@@ -160,6 +164,10 @@ func NewModel(ctx context.Context, cfg appconfig.Config, opts ...Option) Model {
 
 	{ // container picker dialog
 		m.dialogs.containerPicker = dialogs.NewContainerPicker()
+	}
+
+	{ // logs command editor dialog
+		m.dialogs.logsCommand = dialogs.NewLogsCommandEditor()
 	}
 
 	{ // views
@@ -271,6 +279,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.config.ECSClient,
 					m.config.CloudWatchLogsClient,
 					msg.Cluster, msg.Service, msg.Container,
+					0, "", // default period and no filter
 				)
 			} else {
 				m.activeView = logs_view
@@ -290,6 +299,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.config.ECSClient,
 					m.config.CloudWatchLogsClient,
 					msg.Cluster, msg.Service, msg.Containers[0],
+					0, "", // default period and no filter
 				)
 			} else {
 				m.activeView = logs_view
@@ -316,12 +326,56 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.dialogs.open = false
 	case logsview.ExternalViewerFinishedMsg:
 		if msg.Err != nil {
+			// Exit status 130 = SIGINT (Ctrl+C) — normal exit from viewer
+			// Also suppress "signal: interrupt" which Go reports for signal kills
+			var exitErr *exec.ExitError
+			if errors.As(msg.Err, &exitErr) && (exitErr.ExitCode() == 130 || exitErr.ExitCode() == -1) {
+				break
+			}
 			cmd = func() tea.Msg {
 				return messages.ToggleNotificationDialog{
 					Error: fmt.Errorf("logs viewer: %w", msg.Err),
 				}
 			}
 		}
+	case messages.OpenLogsWithEditor:
+		if msg.Container != "" {
+			// Container known, open editor dialog
+			m.dialogs.open = true
+			m.dialogs.active = logs_command_dialog
+			cmd = m.dialogs.logsCommand.Open(msg.Cluster, msg.Service, msg.Container, m.config.LogsViewer)
+		} else {
+			// Resolve containers first, then open editor
+			cmd = m.resolveContainersForEditor(msg.Cluster, msg.Service)
+		}
+	case messages.ContainersResolvedForEditor:
+		if len(msg.Containers) == 1 {
+			m.dialogs.open = true
+			m.dialogs.active = logs_command_dialog
+			cmd = m.dialogs.logsCommand.Open(msg.Cluster, msg.Service, msg.Containers[0], m.config.LogsViewer)
+		} else if len(msg.Containers) > 1 {
+			// Show container picker, then open editor after selection
+			// For now, use first container — TODO: chain picker → editor
+			m.dialogs.open = true
+			m.dialogs.active = logs_command_dialog
+			cmd = m.dialogs.logsCommand.Open(msg.Cluster, msg.Service, msg.Containers[0], m.config.LogsViewer)
+		} else {
+			cmd = func() tea.Msg {
+				return messages.ToggleNotificationDialog{
+					Error: fmt.Errorf("no log groups found for service %s", msg.Service),
+				}
+			}
+		}
+	case messages.CloseLogsCommandEditor:
+		m.dialogs.open = false
+	case messages.RunLogsWithCommand:
+		cmd = logsview.OpenInExternalViewer(
+			msg.Command,
+			m.config.ECSClient,
+			m.config.CloudWatchLogsClient,
+			msg.Cluster, msg.Service, msg.Container,
+			msg.Period, msg.FilterPattern,
+		)
 	}
 
 	var fwdCmd tea.Cmd
@@ -386,6 +440,8 @@ func (m Model) routeToActiveOnly(msg tea.Msg) (Model, tea.Cmd) {
 			return m, m.dialogs.mfa.Update(msg)
 		case container_picker_dialog:
 			return m, m.dialogs.containerPicker.Update(msg)
+		case logs_command_dialog:
+			return m, m.dialogs.logsCommand.Update(msg)
 		}
 	}
 
@@ -443,6 +499,33 @@ func (m Model) resolveContainers(cluster, service string) tea.Cmd {
 			containers[i] = g.Container
 		}
 		return messages.ContainersResolved{
+			Cluster:    cluster,
+			Service:    service,
+			Containers: containers,
+		}
+	}
+}
+
+func (m Model) resolveContainersForEditor(cluster, service string) tea.Cmd {
+	config := m.config
+	return func() tea.Msg {
+		ecsClient := config.ECSClient
+		if ecsClient == nil {
+			return messages.ToggleNotificationDialog{
+				Error: fmt.Errorf("ECS client not available"),
+			}
+		}
+		groups, err := cwladapter.ResolveLogGroups(ecsClient, context.Background(), cluster, service)
+		if err != nil {
+			return messages.ToggleNotificationDialog{
+				Error: fmt.Errorf("resolving containers: %w", err),
+			}
+		}
+		containers := make([]string, len(groups))
+		for i, g := range groups {
+			containers[i] = g.Container
+		}
+		return messages.ContainersResolvedForEditor{
 			Cluster:    cluster,
 			Service:    service,
 			Containers: containers,
@@ -650,6 +733,8 @@ func (m Model) View() tea.View {
 			dialog = m.dialogs.mfa
 		case container_picker_dialog:
 			dialog = m.dialogs.containerPicker
+		case logs_command_dialog:
+			dialog = m.dialogs.logsCommand
 		}
 		renderedDialog := dialog.View()
 		dialogLayer := lipgloss.NewLayer(renderedDialog).

@@ -53,7 +53,7 @@ func ResolveLogGroup(ecsClient *ecs.Client, ctx context.Context, cluster, servic
 // FetchHistory fetches recent logs and returns formatted lines.
 func FetchHistory(cwlClient *cloudwatchlogs.Client, ctx context.Context, cfg adaptertypes.LogConfig) ([]adaptertypes.FormattedLogLine, error) {
 	start := time.Now().Add(-cfg.LookbackDuration)
-	events, err := cwlconnector.FetchRecentLogs(cwlClient, ctx, cfg.LogGroup, cfg.StreamPrefix, "", start, nil)
+	events, err := cwlconnector.FetchRecentLogs(cwlClient, ctx, cfg.LogGroup, cfg.StreamPrefix, cfg.FilterPattern, start, nil)
 	if err != nil {
 		return nil, fmt.Errorf("fetching history for %s: %w", cfg.LogGroup, err)
 	}
@@ -67,7 +67,7 @@ func FetchHistory(cwlClient *cloudwatchlogs.Client, ctx context.Context, cfg ada
 // StartTail starts a live tail and returns a channel of formatted lines.
 // Cancel the context to stop the session.
 func StartTail(cwlClient *cloudwatchlogs.Client, ctx context.Context, cfg adaptertypes.LogConfig) (<-chan adaptertypes.FormattedLogLine, error) {
-	rawCh, err := cwlconnector.TailLogs(cwlClient, ctx, cfg.LogGroup, cfg.StreamPrefix, "")
+	rawCh, err := cwlconnector.TailLogs(cwlClient, ctx, cfg.LogGroup, cfg.StreamPrefix, cfg.FilterPattern)
 	if err != nil {
 		return nil, fmt.Errorf("starting tail for %s: %w", cfg.LogGroup, err)
 	}

@@ -33,23 +33,24 @@ func DefaultDetailsKeyMap() *DetailsPaneKeyMap {
 
 // TaskPaneKeyMap defines keybindings for the task selection pane.
 type TaskPaneKeyMap struct {
-	Search key.Binding
-	Zoom   key.Binding
-	Copy   key.Binding
-	Reload key.Binding
-	Logs   key.Binding
-	Esc    key.Binding
+	Search      key.Binding
+	Zoom        key.Binding
+	Copy        key.Binding
+	Reload      key.Binding
+	Logs        key.Binding
+	LogsCommand key.Binding
+	Esc         key.Binding
 }
 
 // ShortHelp implements the KeyMap interface.
 func (km *TaskPaneKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{km.Search, km.Zoom, km.Logs, km.Reload, km.Esc}
+	return []key.Binding{km.Search, km.Zoom, km.Logs, km.LogsCommand, km.Reload, km.Esc}
 }
 
 // FullHelp implements the KeyMap interface.
 func (km *TaskPaneKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{km.Search, km.Zoom, km.Esc, km.Reload, km.Copy, km.Logs},
+		{km.Search, km.Zoom, km.Esc, km.Reload, km.Copy, km.Logs, km.LogsCommand},
 	}
 }
 
@@ -75,6 +76,10 @@ func DefaultTaskPaneKeyMap() *TaskPaneKeyMap {
 		Logs: key.NewBinding(
 			key.WithKeys("l"),
 			key.WithHelp("l", "logs"),
+		),
+		LogsCommand: key.NewBinding(
+			key.WithKeys("L"),
+			key.WithHelp("shift+l", "logs cmd"),
 		),
 		Esc: key.NewBinding(
 			key.WithKeys("esc"),
