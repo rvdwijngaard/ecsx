@@ -15,6 +15,7 @@ type ItemsQueryMode int
 const (
 	Table_selection View = iota
 	Item_selection
+	Service_selection
 )
 const (
 	ScanMode ItemsQueryMode = iota
@@ -76,6 +77,8 @@ type ZoomToggleItemSelectionPane struct{}
 type ZoomToggleItemDetailsPane struct{}
 type ZoomToggleTableSelectionPane struct{}
 type ZoomToggleTableDetailsPane struct{}
+type ZoomToggleServiceSelectionPane struct{}
+type ZoomToggleServiceDetailsPane struct{}
 
 type PreviewItem struct {
 	StyledItem string
@@ -112,6 +115,16 @@ type ClusterDetails struct {
 type SelectCluster struct {
 	ClusterName string
 	Details     apitypes2.ClusterItem
+}
+
+type ServicePageReady struct {
+	Cluster  string
+	Services []apitypes2.ServiceItem
+	Err      error
+}
+
+type ServiceDetails struct {
+	Details *apitypes2.ServiceItem
 }
 
 type TablePageReady struct {

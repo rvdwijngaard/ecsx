@@ -1,4 +1,4 @@
-package clusterselection
+package serviceselection
 
 import (
 	"context"
@@ -26,12 +26,12 @@ import (
 	u "github.com/ron/ecsx/pkg/util"
 )
 
-type ClusterTableStyles struct {
+type ServiceTableStyles struct {
 	SelectedBackground    color.Color
 	SearchMatchBackground color.Color
 }
 
-type clusterSelectionPane struct {
+type serviceSelectionPane struct {
 	// top-level context
 	ctx context.Context
 
@@ -40,7 +40,7 @@ type clusterSelectionPane struct {
 
 	// styles
 	styles struct {
-		Table ClusterTableStyles
+		Table ServiceTableStyles
 	}
 
 	// spinner
@@ -53,6 +53,9 @@ type clusterSelectionPane struct {
 	// cancel last call context (debounce)
 	cancelDetails func()
 	debounceDur   time.Duration
+
+	// cancel loading services
+	cancelServices func()
 
 	// standard timeout
 	stdTO time.Duration
@@ -70,7 +73,7 @@ type clusterSelectionPane struct {
 	search *search.SearchBox
 
 	// key map
-	KeyMap *ClusterPaneKeyMap
+	KeyMap *ServicePaneKeyMap
 
 	// Additional Keys
 	AddKeyMap keymaps.AdditionalKeys
@@ -78,43 +81,47 @@ type clusterSelectionPane struct {
 	// the underlying table component
 	content *table.Model
 
-	// the clusters retrieved from ECS
-	clusters []apitypes.ClusterItem
+	// the services retrieved from ECS
+	services []apitypes.ServiceItem
+
+	// the currently selected cluster
+	clusterName string
 
 	// filtering parameters
 	filtering struct {
-		matchedClusters []int   // indices referring to clusters
-		matchedRunes    [][]int // matches by index to filtering.matchedClusters
+		matchedServices []int   // indices referring to services
+		matchedRunes    [][]int // matches by index to filtering.matchedServices
 		enabled         bool
 	}
 
-	// index to most recently previewed cluster
-	lastClusterDetails int
+	// index to most recently previewed service
+	lastServiceDetails int
 }
 
-type clusterPaneOption func(p *clusterSelectionPane)
+type servicePaneOption func(p *serviceSelectionPane)
 
-func withClusterPaneKeys(keys keymaps.AdditionalKeys) clusterPaneOption {
-	return func(t *clusterSelectionPane) {
+func withServicePaneKeys(keys keymaps.AdditionalKeys) servicePaneOption {
+	return func(t *serviceSelectionPane) {
 		t.AddKeyMap = keys
 	}
 }
 
-func newClusterSelectionPane(ctx context.Context, config *appconfig.Config, opts ...clusterPaneOption) *clusterSelectionPane {
-	p := &clusterSelectionPane{
-		ctx:           ctx,
-		config:        config,
-		cancelDetails: func() {}, // noop on init
-		debounceDur:   50 * time.Millisecond,
-		stdTO:         30 * time.Second,
-		KeyMap:        DefaultClusterPaneKeyMap(),
+func newServiceSelectionPane(ctx context.Context, config *appconfig.Config, opts ...servicePaneOption) *serviceSelectionPane {
+	p := &serviceSelectionPane{
+		ctx:            ctx,
+		config:         config,
+		cancelDetails:  func() {}, // noop on init
+		cancelServices: func() {}, // noop on init
+		debounceDur:    50 * time.Millisecond,
+		stdTO:          30 * time.Second,
+		KeyMap:         DefaultServicePaneKeyMap(),
 	}
 
 	{ // contents table
 		t := table.New(
-			table.WithColumns([]table.Column{{Title: "cluster-name", Width: 64}}),
+			table.WithColumns([]table.Column{{Title: "service-name", Width: 64}}),
 			table.WithFocused(true),
-			table.WithFieldDelegate(p.ClusterRowFieldDelegate),
+			table.WithFieldDelegate(p.ServiceRowFieldDelegate),
 		)
 		s := table.DefaultStyles()
 		s.Header = s.Header.
@@ -128,7 +135,7 @@ func newClusterSelectionPane(ctx context.Context, config *appconfig.Config, opts
 			Bold(false)
 		t.SetStyles(s)
 
-		st := ClusterTableStyles{
+		st := ServiceTableStyles{
 			SelectedBackground:    commonstyles.TableSelectedBg,
 			SearchMatchBackground: commonstyles.SearchHighlight,
 		}
@@ -144,7 +151,7 @@ func newClusterSelectionPane(ctx context.Context, config *appconfig.Config, opts
 			Foreground(lipgloss.Color("205")).
 			PaddingLeft(1)
 		p.spinner.model = sp
-		p.spinner.text = "loading clusters..."
+		p.spinner.text = "loading services..."
 	}
 
 	{ // search box
@@ -155,20 +162,20 @@ func newClusterSelectionPane(ctx context.Context, config *appconfig.Config, opts
 				},
 				EmptyInput: func() tea.Cmd {
 					p.filtering.enabled = false
-					p.filtering.matchedClusters = make([]int, 0)
+					p.filtering.matchedServices = make([]int, 0)
 					p.filtering.matchedRunes = make([][]int, 0)
 					p.content.ResetVirtualRows()
-					return p.MaybePreviewCluster(true)
+					return p.MaybePreviewService(true)
 				},
 				Results: func(_ string, results []search.FilteredItem) tea.Cmd {
 					p.filtering.enabled = true
-					p.filtering.matchedClusters = make([]int, len(results))
+					p.filtering.matchedServices = make([]int, len(results))
 					p.filtering.matchedRunes = make([][]int, len(results))
 					rows := p.content.Rows()
 					filtered := make([]table.Row, len(results))
 					for i, match := range results {
 						filtered[i] = rows[match.Index]
-						p.filtering.matchedClusters[i] = match.Index
+						p.filtering.matchedServices[i] = match.Index
 						p.filtering.matchedRunes[i] = match.Matches
 					}
 					p.content.SetVirtualRows(filtered)
@@ -176,11 +183,11 @@ func newClusterSelectionPane(ctx context.Context, config *appconfig.Config, opts
 				},
 				Reset: func(searchHeight int) tea.Cmd {
 					p.filtering.enabled = false
-					p.filtering.matchedClusters = make([]int, 0)
+					p.filtering.matchedServices = make([]int, 0)
 					p.filtering.matchedRunes = make([][]int, 0)
 					p.content.ResetVirtualRows()
 					p.updateSize()
-					return p.MaybePreviewCluster(true)
+					return p.MaybePreviewService(true)
 				},
 				SearchBoxOpens: func(searchHeight int) tea.Cmd {
 					p.updateSize()
@@ -201,76 +208,85 @@ func newClusterSelectionPane(ctx context.Context, config *appconfig.Config, opts
 	return p
 }
 
-func (m *clusterSelectionPane) cleanSlate() {
+func (m *serviceSelectionPane) cleanSlate() {
 	m.err = nil
 }
 
-func (m *clusterSelectionPane) Init() tea.Cmd {
+func (m *serviceSelectionPane) Init() tea.Cmd {
 	m.search.Reset()
 	m.content.ResetVirtualRows()
 	m.content.SetCursor(0)
 	m.cleanSlate()
-	m.clusters = []apitypes.ClusterItem{}
+	m.services = []apitypes.ServiceItem{}
+	m.clusterName = ""
 
 	// cancel any lingering calls
 	m.cancelDetails()
-	return m.loadClusters()
+	m.cancelServices()
+	return nil
 }
 
-func (m *clusterSelectionPane) loadClusters() tea.Cmd {
+func (m *serviceSelectionPane) loadServices() tea.Cmd {
 	spinnerCmd := m.activateSpinner()
-	m.updateSize()
 
 	client := m.config.ECSClient
+	cluster := m.clusterName
 	ctx, cc := context.WithTimeout(m.ctx, m.stdTO)
-	_ = cc // timeout will cancel automatically
+	m.cancelServices = cc
 
 	return tea.Batch(func() tea.Msg {
-		clusters, err := ecsadapter.ListClusters(client, ctx)
-		return messages.ClusterPageReady{
-			Clusters: clusters,
+		defer cc()
+		services, err := ecsadapter.ListServices(client, ctx, cluster)
+		return messages.ServicePageReady{
+			Cluster:  cluster,
+			Services: services,
 			Err:      err,
 		}
 	}, spinnerCmd)
 }
 
-func (m *clusterSelectionPane) activateSpinner() tea.Cmd {
+func (m *serviceSelectionPane) activateSpinner() tea.Cmd {
 	m.spinner.active = true
 	m.updateSize()
 	return m.spinner.model.Tick
 }
 
-func (m *clusterSelectionPane) deactivateSpinner() {
+func (m *serviceSelectionPane) deactivateSpinner() {
 	m.spinner.active = false
 	m.updateSize()
 }
 
-func (m *clusterSelectionPane) processClusterPage(msg messages.ClusterPageReady) tea.Cmd {
+func (m *serviceSelectionPane) processServicePage(msg messages.ServicePageReady) tea.Cmd {
 	m.deactivateSpinner()
+	if msg.Cluster != m.clusterName { // expired
+		return nil
+	}
 	if msg.Err != nil {
 		m.err = msg.Err
 		return nil
 	}
-	m.clusters = msg.Clusters
+	m.services = msg.Services
 
-	rows := make([]table.Row, len(m.clusters))
-	for i, c := range m.clusters {
+	rows := make([]table.Row, len(m.services))
+	for i, s := range m.services {
 		rows[i] = []table.Field{
-			enrichedField{value: c.Name},
+			enrichedField{value: s.Name},
 		}
 	}
 	m.content.SetRows(rows)
 
-	return m.MaybePreviewCluster(true)
+	return m.MaybePreviewService(true)
 }
 
-func (m *clusterSelectionPane) Update(msg tea.Msg) tea.Cmd {
+func (m *serviceSelectionPane) Update(msg tea.Msg) tea.Cmd {
 	cmds := []tea.Cmd{}
 	switch msg := msg.(type) {
-	case messages.ClusterDetails:
+	case messages.ServiceDetails:
 		return nil
-	case messages.ClusterPageReady:
-		return m.processClusterPage(msg)
+	case messages.SelectCluster:
+		return m.selectCluster(msg.ClusterName)
+	case messages.ServicePageReady:
+		return m.processServicePage(msg)
 	case spinner.TickMsg:
 		if !m.spinner.active {
 			return nil
@@ -286,12 +302,26 @@ func (m *clusterSelectionPane) Update(msg tea.Msg) tea.Cmd {
 		cmds = append(cmds, m.handleNavigation(msg))
 	}
 
-	cmds = append(cmds, m.MaybePreviewCluster(false))
+	cmds = append(cmds, m.MaybePreviewService(false))
 	return tea.Batch(cmds...)
 }
 
+func (m *serviceSelectionPane) selectCluster(clusterName string) tea.Cmd {
+	m.search.Reset()
+	m.content.ResetVirtualRows()
+	m.content.SetCursor(0)
+	m.cleanSlate()
+	m.services = []apitypes.ServiceItem{}
+	m.clusterName = clusterName
+	m.lastServiceDetails = -1
+
+	m.cancelDetails()
+	m.cancelServices()
+	return m.loadServices()
+}
+
 // handleNavigation handles events when search is not active.
-func (m *clusterSelectionPane) handleNavigation(msg tea.Msg) tea.Cmd {
+func (m *serviceSelectionPane) handleNavigation(msg tea.Msg) tea.Cmd {
 	cmds := []tea.Cmd{}
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
@@ -299,13 +329,18 @@ func (m *clusterSelectionPane) handleNavigation(msg tea.Msg) tea.Cmd {
 		case key.Matches(msg, m.KeyMap.Search):
 			cmds = append(cmds, m.search.OpenSearchBox())
 		case key.Matches(msg, m.KeyMap.Select):
-			return m.selectCluster()
+			// TODO: future — navigate into tasks for a service
+			return nil
 		case key.Matches(msg, m.KeyMap.Zoom):
 			return m.Zoom()
 		case key.Matches(msg, m.KeyMap.Esc):
-			m.search.Reset()
+			if m.search.IsEnabled() {
+				m.search.Reset()
+			} else {
+				return m.escape()
+			}
 		case key.Matches(msg, m.KeyMap.Reload):
-			return m.Init()
+			return m.reload()
 		case key.Matches(msg, m.KeyMap.Copy):
 			return m.copy()
 		default:
@@ -327,7 +362,7 @@ func (f enrichedField) Value() string {
 	return f.value
 }
 
-func (m *clusterSelectionPane) ClusterRowFieldDelegate(row table.Row, col table.Column, colIdx, rowIdx, colW, padL, padR int, selected bool) string {
+func (m *serviceSelectionPane) ServiceRowFieldDelegate(row table.Row, col table.Column, colIdx, rowIdx, colW, padL, padR int, selected bool) string {
 	fullWidth := colW + padL + padR
 
 	field := row[colIdx].(enrichedField)
@@ -366,7 +401,7 @@ func (m *clusterSelectionPane) ClusterRowFieldDelegate(row table.Row, col table.
 	return enforceWidth(style.Render(field.value))
 }
 
-func (m *clusterSelectionPane) copy() tea.Cmd {
+func (m *serviceSelectionPane) copy() tea.Cmd {
 	r := m.content.VisualRows()
 	c := max(0, m.content.Cursor())
 	if c >= len(r) {
@@ -381,85 +416,75 @@ func (m *clusterSelectionPane) copy() tea.Cmd {
 	return notifyCopySuccess
 }
 
-// MaybePreviewCluster sends a ClusterDetails message for the currently selected cluster.
-func (m *clusterSelectionPane) MaybePreviewCluster(force bool) tea.Cmd {
-	if len(m.clusters) == 0 || (m.filtering.enabled && len(m.filtering.matchedClusters) == 0) {
+// MaybePreviewService sends a ServiceDetails message for the currently selected service.
+func (m *serviceSelectionPane) MaybePreviewService(force bool) tea.Cmd {
+	if len(m.services) == 0 || (m.filtering.enabled && len(m.filtering.matchedServices) == 0) {
 		return func() tea.Msg {
-			return messages.ClusterDetails{
+			return messages.ServiceDetails{
 				Details: nil,
 			}
 		}
 	}
 
 	idx := m.content.Cursor()
-	if m.filtering.enabled && len(m.filtering.matchedClusters) > 0 {
-		idx = m.filtering.matchedClusters[idx]
+	if m.filtering.enabled && len(m.filtering.matchedServices) > 0 {
+		idx = m.filtering.matchedServices[idx]
 	}
-	if idx == m.lastClusterDetails && !force {
+	if idx == m.lastServiceDetails && !force {
 		return nil
 	}
-	m.lastClusterDetails = idx
-	cluster := m.clusters[idx]
+	m.lastServiceDetails = idx
+	service := m.services[idx]
 
 	return func() tea.Msg {
-		return messages.ClusterDetails{
-			Details: &cluster,
+		return messages.ServiceDetails{
+			Details: &service,
 		}
 	}
 }
 
-func (m *clusterSelectionPane) Zoom() tea.Cmd {
+func (m *serviceSelectionPane) Zoom() tea.Cmd {
 	return func() tea.Msg {
-		return messages.ZoomToggleTableSelectionPane{}
+		return messages.ZoomToggleServiceSelectionPane{}
 	}
 }
 
-func (m *clusterSelectionPane) selectCluster() tea.Cmd {
+func (m *serviceSelectionPane) escape() tea.Cmd {
 	m.cancelDetails()
-	rowP := m.content.SelectedRow()
-	if rowP == nil {
-		return nil
-	}
-	row := *rowP
-	if len(row) == 0 {
-		return nil
-	}
-
-	// Find the cluster details
-	clusterName := row[0].Value()
-	var details *apitypes.ClusterItem
-	for i := range m.clusters {
-		if m.clusters[i].Name == clusterName {
-			details = &m.clusters[i]
-			break
-		}
-	}
-	if details == nil {
-		return nil
-	}
+	m.cancelServices()
 
 	switchView := func() tea.Msg {
 		return messages.SwitchView{
-			OldView: messages.Table_selection,
-			NewView: messages.Service_selection,
+			OldView: messages.Service_selection,
+			NewView: messages.Table_selection,
 		}
 	}
-	selectCluster := func() tea.Msg {
-		return messages.SelectCluster{
-			ClusterName: clusterName,
-			Details:     *details,
-		}
+	resetPreview := func() tea.Msg {
+		return messages.ServiceDetails{Details: nil}
 	}
-	return tea.Batch(switchView, selectCluster)
+	return tea.Batch(switchView, resetPreview)
 }
 
-func (m *clusterSelectionPane) applySize(height, width int) {
+func (m *serviceSelectionPane) reload() tea.Cmd {
+	m.search.Reset()
+	m.content.ResetVirtualRows()
+	m.content.SetCursor(0)
+	m.cleanSlate()
+	m.services = []apitypes.ServiceItem{}
+	m.lastServiceDetails = -1
+
+	m.cancelDetails()
+	m.cancelServices()
+	return m.loadServices()
+}
+
+func (m *serviceSelectionPane) applySize(height, width int) {
 	m.window.height = height
 	m.window.width = width
 	m.updateSize()
 }
 
-func (m *clusterSelectionPane) updateSize() {
+func (m *serviceSelectionPane) updateSize() {
 	h, w := m.window.height, m.window.width
 
 	searchBoxH := u.Ternary(m.search.GetHeight(), 0, m.search.IsEnabled())
@@ -468,7 +493,7 @@ func (m *clusterSelectionPane) updateSize() {
 	m.search.SetWidth(w)
 }
 
-func (m *clusterSelectionPane) View() string {
+func (m *serviceSelectionPane) View() string {
 	if m.err != nil {
 		return m.err.Error()
 	}
@@ -480,13 +505,13 @@ func (m *clusterSelectionPane) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, rendering...)
 }
 
-func (m *clusterSelectionPane) noContentMessage() string {
+func (m *serviceSelectionPane) noContentMessage() string {
 	if m.spinner.active {
 		return ""
 	}
 	s := strings.Builder{}
 	fmt.Fprintf(&s, "==================================================\n")
-	fmt.Fprintf(&s, "             NO CLUSTERS FOUND                    \n")
+	fmt.Fprintf(&s, "          NO SERVICES IN THIS CLUSTER             \n")
 	fmt.Fprintf(&s, "==================================================\n")
 	return s.String()
 }

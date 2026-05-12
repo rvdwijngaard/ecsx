@@ -21,6 +21,7 @@ import (
 	commonstyles "github.com/ron/ecsx/pkg/ui/internal/styles"
 	clustersview "github.com/ron/ecsx/pkg/ui/internal/views/clusters"
 	itemsview "github.com/ron/ecsx/pkg/ui/internal/views/items"
+	servicesview "github.com/ron/ecsx/pkg/ui/internal/views/services"
 	"github.com/ron/ecsx/pkg/ui/internal/views/util/keymaps"
 	u "github.com/ron/ecsx/pkg/util"
 )
@@ -31,6 +32,7 @@ type Dialog int
 const (
 	tables_view View = iota
 	items_view
+	services_view
 )
 
 const (
@@ -94,8 +96,9 @@ type Model struct {
 	config *appconfig.Config
 
 	// views
-	clusterSelection *clustersview.ClusterSelection
-	itemselection    *itemsview.ItemSelection
+	clusterSelection  *clustersview.ClusterSelection
+	itemselection     *itemsview.ItemSelection
+	serviceSelection  *servicesview.ServiceSelection
 
 	// help
 	Help help.Model
@@ -148,11 +151,12 @@ func NewModel(ctx context.Context, cfg appconfig.Config, opts ...Option) Model {
 	{ // views
 		m.clusterSelection = clustersview.NewClusterSelectionView(ctx, &cfg, clustersview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
 		m.itemselection = itemsview.NewItemSelectionView(ctx, &cfg, itemsview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
+		m.serviceSelection = servicesview.NewServiceSelectionView(ctx, &cfg, servicesview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
 	}
 
 	{ // cluster view bound dialogs
 		clusterViewDialogKeys := m.clusterSelection.DialogKeyMaps()
-		m.dialogs.help = dialogs.NewHelp(m.clusterSelection, m.itemselection, DialogCloseKeymapFrom(m.KeyMap.Help))
+		m.dialogs.help = dialogs.NewHelp(m.clusterSelection, m.itemselection, m.serviceSelection, DialogCloseKeymapFrom(m.KeyMap.Help))
 		m.dialogs.region = dialogs.NewRegionsDialog(m.config.AvailableRegions, m.config.StarredRegions, m.config.Region, DialogCloseKeymapFrom(clusterViewDialogKeys.RegionDialog))
 	}
 
@@ -189,6 +193,7 @@ func (m Model) Init() tea.Cmd {
 	m.config.ECSClient = ecsconnector.NewClient(cfg, u.IfNotNil(m.config.Profile, "")).ECS
 	cmds = append(cmds, m.clusterSelection.Init())
 	cmds = append(cmds, m.itemselection.Init())
+	cmds = append(cmds, m.serviceSelection.Init())
 
 	return tea.Batch(cmds...)
 }
@@ -262,6 +267,7 @@ func (m Model) broadcast(msg tea.Msg) (Model, tea.Cmd) {
 	// views
 	cmds = append(cmds, m.clusterSelection.Update(msg))
 	cmds = append(cmds, m.itemselection.Update(msg))
+	cmds = append(cmds, m.serviceSelection.Update(msg))
 
 	// dialogs
 	cmds = append(cmds, m.dialogs.help.Update(msg))
@@ -306,6 +312,8 @@ func (m Model) routeToActiveOnly(msg tea.Msg) (Model, tea.Cmd) {
 		return m, m.clusterSelection.Update(msg)
 	case items_view:
 		return m, m.itemselection.Update(msg)
+	case services_view:
+		return m, m.serviceSelection.Update(msg)
 	default:
 		log.Fatalf("could not identify active view '%d'", int(m.activeView))
 	}
@@ -342,6 +350,8 @@ func (m Model) handleSwitchView(msg messages.SwitchView) (Model, tea.Cmd) {
 		m.activeView = tables_view
 	case messages.Item_selection:
 		m.activeView = items_view
+	case messages.Service_selection:
+		m.activeView = services_view
 	}
 	return m, m.dialogs.help.Update(msg)
 }
@@ -479,6 +489,9 @@ func (m Model) View() tea.View {
 	case items_view:
 		page = m.itemselection.View()
 		help = m.Help.ShortHelpView(m.itemselection.ShortHelp())
+	case services_view:
+		page = m.serviceSelection.View()
+		help = m.Help.ShortHelpView(m.serviceSelection.ShortHelp())
 	}
 
 	// assemble gutter
