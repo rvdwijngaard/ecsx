@@ -17,6 +17,7 @@ type Config struct {
 	URL              *string
 	AvailableRegions []string
 	StarredRegions   []string
+	LogsViewer       string
 
 	Client               *dynamodb.Client
 	ECSClient            *ecs.Client

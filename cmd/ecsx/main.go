@@ -101,6 +101,7 @@ func runApplication(cmd *cobra.Command, args []string) error {
 		AvailableRegions: cfgf.AWSRegions,
 		StarredRegions:   cfgf.StarredRegions,
 		MaxTables:        cfgf.MaxTables,
+		LogsViewer:       cfgf.LogsViewer,
 
 		MFACredentialCB: mfaCB,
 		MFACredentialC:  credsC,

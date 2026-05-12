@@ -38,6 +38,10 @@ type LogsView struct {
 	tailCancel context.CancelFunc
 	tailCh     <-chan adaptertypes.FormattedLogLine
 
+	// external log formatter (e.g. "hl -L -F")
+	// When configured, logs are opened in an external viewer via tea.ExecProcess
+	// instead of the internal view. See external.go.
+
 	// log buffer
 	buffer *RingBuffer
 

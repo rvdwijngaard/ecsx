@@ -264,10 +264,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m, cmd = m.SwitchQueryMode(msg)
 	case messages.OpenLogs:
 		if msg.Container != "" {
-			// Container already selected, go directly to logs
-			m.activeView = logs_view
-			m.logsView.ApplySize(m.window.height-1, m.window.width)
-			cmd = m.logsView.Update(msg)
+			// Container selected — use external viewer or internal logs view
+			if m.config.LogsViewer != "" {
+				cmd = logsview.OpenInExternalViewer(
+					m.config.LogsViewer,
+					m.config.ECSClient,
+					m.config.CloudWatchLogsClient,
+					msg.Cluster, msg.Service, msg.Container,
+				)
+			} else {
+				m.activeView = logs_view
+				m.logsView.ApplySize(m.window.height-1, m.window.width)
+				cmd = m.logsView.Update(msg)
+			}
 		} else {
 			// Need to resolve containers first
 			cmd = m.resolveContainers(msg.Cluster, msg.Service)
@@ -275,13 +284,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case messages.ContainersResolved:
 		if len(msg.Containers) == 1 {
 			// Single container, skip picker
-			m.activeView = logs_view
-			m.logsView.ApplySize(m.window.height-1, m.window.width)
-			cmd = m.logsView.Update(messages.OpenLogs{
-				Cluster:   msg.Cluster,
-				Service:   msg.Service,
-				Container: msg.Containers[0],
-			})
+			if m.config.LogsViewer != "" {
+				cmd = logsview.OpenInExternalViewer(
+					m.config.LogsViewer,
+					m.config.ECSClient,
+					m.config.CloudWatchLogsClient,
+					msg.Cluster, msg.Service, msg.Containers[0],
+				)
+			} else {
+				m.activeView = logs_view
+				m.logsView.ApplySize(m.window.height-1, m.window.width)
+				cmd = m.logsView.Update(messages.OpenLogs{
+					Cluster:   msg.Cluster,
+					Service:   msg.Service,
+					Container: msg.Containers[0],
+				})
+			}
 		} else if len(msg.Containers) > 1 {
 			// Multiple containers, show picker
 			m.dialogs.containerPicker.SetContainers(msg.Cluster, msg.Service, msg.Containers)
@@ -296,6 +314,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case messages.CloseContainerPicker:
 		m.dialogs.open = false
+	case logsview.ExternalViewerFinishedMsg:
+		if msg.Err != nil {
+			cmd = func() tea.Msg {
+				return messages.ToggleNotificationDialog{
+					Error: fmt.Errorf("logs viewer: %w", msg.Err),
+				}
+			}
+		}
 	}
 
 	var fwdCmd tea.Cmd

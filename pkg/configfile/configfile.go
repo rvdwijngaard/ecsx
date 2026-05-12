@@ -61,6 +61,10 @@ type ConfigFile struct {
 
 	DefaultProfile string `yaml:"default_profile"`
 
+	// LogsViewer is an optional external command (e.g. "hl -L -F") used to
+	// format log lines before displaying them in the logs view.
+	LogsViewer string `yaml:"logs_viewer"`
+
 	// tables will be paged in automatically on boot. To prevent excessive
 	// calls, we specify a limit on how many pages (size of 100) can be
 	// retrieved. This parameter specifies the number of tables, not pages.
