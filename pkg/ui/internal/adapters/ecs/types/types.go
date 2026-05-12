@@ -45,17 +45,28 @@ type ServiceItem struct {
 
 // TaskItem represents a task formatted for UI display.
 type TaskItem struct {
-	ID             string
-	ARN            string
-	Status         string
-	DesiredStatus  string
-	HealthStatus   string
-	LaunchType     string
-	TaskDefinition string
-	CPU            string
-	Memory         string
-	StartedAt      *time.Time
-	Containers     []ContainerItem
+	ID                  string
+	ARN                 string
+	Status              string
+	DesiredStatus       string
+	HealthStatus        string
+	LaunchType          string
+	TaskDefinition      string
+	Group               string
+	CPU                 string
+	Memory              string
+	StartedAt           *time.Time
+	CreatedAt           *time.Time
+	StoppedAt           *time.Time
+	StoppedReason       string
+	ContainerInstanceID string
+	EC2InstanceID       string
+	PrivateIP           string
+	PublicIP            string
+	Containers          []ContainerItem
+	// Context fields for console URLs
+	ClusterName string
+	Region      string
 }
 
 // ContainerItem represents a container formatted for UI display.
@@ -80,16 +91,24 @@ func TaskFromConnector(t ecstypes.Task) TaskItem {
 		}
 	}
 	return TaskItem{
-		ID:             t.ID,
-		ARN:            t.ARN,
-		Status:         t.Status,
-		DesiredStatus:  t.DesiredStatus,
-		HealthStatus:   t.HealthStatus,
-		LaunchType:     t.LaunchType,
-		TaskDefinition: t.TaskDefinition,
-		CPU:            t.CPU,
-		Memory:         t.Memory,
-		StartedAt:      t.StartedAt,
-		Containers:     containers,
+		ID:                  t.ID,
+		ARN:                 t.ARN,
+		Status:              t.Status,
+		DesiredStatus:       t.DesiredStatus,
+		HealthStatus:        t.HealthStatus,
+		LaunchType:          t.LaunchType,
+		TaskDefinition:      t.TaskDefinition,
+		Group:               t.Group,
+		CPU:                 t.CPU,
+		Memory:              t.Memory,
+		StartedAt:           t.StartedAt,
+		CreatedAt:           t.CreatedAt,
+		StoppedAt:           t.StoppedAt,
+		StoppedReason:       t.StoppedReason,
+		ContainerInstanceID: t.ContainerInstanceID,
+		EC2InstanceID:       t.EC2InstanceID,
+		PrivateIP:           t.PrivateIP,
+		PublicIP:            t.PublicIP,
+		Containers:          containers,
 	}
 }

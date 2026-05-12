@@ -120,7 +120,10 @@ func newTaskSelectionPane(ctx context.Context, config *appconfig.Config, opts ..
 
 	{ // contents table
 		t := table.New(
-			table.WithColumns([]table.Column{{Title: "task-id", Width: 40}}),
+			table.WithColumns([]table.Column{
+				{Title: "task-id", Width: 36},
+				{Title: "info", Width: 25},
+			}),
 			table.WithFocused(true),
 			table.WithFieldDelegate(p.TaskRowFieldDelegate),
 		)
@@ -239,7 +242,7 @@ func (m *taskSelectionPane) loadTasks() tea.Cmd {
 
 	return tea.Batch(func() tea.Msg {
 		defer cc()
-		tasks, err := ecsadapter.ListTasks(client, ctx, cluster, service)
+		tasks, err := ecsadapter.ListTasks(client, ctx, cluster, service, m.config.Region)
 		return messages.TaskPageReady{
 			Cluster: cluster,
 			Service: service,
@@ -273,8 +276,10 @@ func (m *taskSelectionPane) processTaskPage(msg messages.TaskPageReady) tea.Cmd 
 
 	rows := make([]table.Row, len(m.tasks))
 	for i, t := range m.tasks {
+		info := fmt.Sprintf("%s %s %s", t.LaunchType, t.Status, taskUptime(t.StartedAt))
 		rows[i] = []table.Field{
 			enrichedField{value: t.ID},
+			enrichedField{value: info},
 		}
 	}
 	m.content.SetRows(rows)
@@ -532,4 +537,25 @@ func (m *taskSelectionPane) noContentMessage() string {
 
 func notifyCopySuccess() tea.Msg {
 	return messages.ToggleNotificationDialog{Msg: "Copied!", Duration: 1 * time.Second}
+}
+
+func taskUptime(started *time.Time) string {
+	if started == nil {
+		return ""
+	}
+	d := time.Since(*started)
+	if d < 0 {
+		d = 0
+	}
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+	if hours > 24 {
+		days := hours / 24
+		hours = hours % 24
+		return fmt.Sprintf("up %dd%dh%dm", days, hours, minutes)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("up %dh%dm", hours, minutes)
+	}
+	return fmt.Sprintf("up %dm", minutes)
 }

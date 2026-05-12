@@ -3,6 +3,7 @@ package taskselection
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"
@@ -110,38 +111,91 @@ func renderTaskDetails(details *apitypes.TaskItem, s detailsStyles) string {
 		return ""
 	}
 
-	header := s.headerStyle.Render
 	field := s.fieldNameStyle.Render
+	header := s.headerStyle.Render
 
 	b := strings.Builder{}
-	fmt.Fprintf(&b, "%s\n", header("TASK"))
-	fmt.Fprintf(&b, "%s:  %s\n", field("ID"), details.ID)
-	fmt.Fprintf(&b, "%s: %s\n", field("ARN"), details.ARN)
-	fmt.Fprintf(&b, "%s:  %s\n", field("Status"), details.Status)
-	fmt.Fprintf(&b, "%s:  %s\n", field("Desired Status"), details.DesiredStatus)
-	fmt.Fprintf(&b, "%s:  %s\n", field("Health Status"), details.HealthStatus)
-	fmt.Fprintf(&b, "\n")
-	fmt.Fprintf(&b, "%s\n", header("CONFIGURATION"))
-	fmt.Fprintf(&b, "%s:  %s\n", field("Launch Type"), details.LaunchType)
-	fmt.Fprintf(&b, "%s:  %s\n", field("Task Definition"), details.TaskDefinition)
-	fmt.Fprintf(&b, "%s:  %s\n", field("CPU"), details.CPU)
-	fmt.Fprintf(&b, "%s:  %s\n", field("Memory"), details.Memory)
+	fmt.Fprintf(&b, "  %s %s\n", field("Task ID"), details.ID)
+	fmt.Fprintf(&b, "  %s %s\n", field("Status"), details.Status)
+	fmt.Fprintf(&b, "  %s %s\n", field("Desired Status"), details.DesiredStatus)
+	fmt.Fprintf(&b, "  %s %s\n", field("Health Status"), details.HealthStatus)
+	fmt.Fprintf(&b, "  %s %s\n", field("Launch Type"), details.LaunchType)
+	fmt.Fprintf(&b, "  %s %s\n", field("Task Definition"), details.TaskDefinition)
+	fmt.Fprintf(&b, "  %s %s\n", field("Group"), details.Group)
+	fmt.Fprintf(&b, "  %s %s / %s\n", field("CPU / Memory"), details.CPU, details.Memory)
 	if details.StartedAt != nil {
-		fmt.Fprintf(&b, "%s:  %s\n", field("Started At"), details.StartedAt.Local().Format("2006-01-02 15:04:05"))
+		fmt.Fprintf(&b, "  %s %s\n", field("Started At"), details.StartedAt.Local().Format("2006-01-02 15:04:05"))
+		fmt.Fprintf(&b, "  %s %s\n", field("Uptime"), formatUptime(*details.StartedAt))
 	}
+	if details.CreatedAt != nil {
+		fmt.Fprintf(&b, "  %s %s\n", field("Created At"), details.CreatedAt.Local().Format("2006-01-02 15:04:05"))
+	}
+	if details.StoppedAt != nil {
+		fmt.Fprintf(&b, "  %s %s\n", field("Stopped At"), details.StoppedAt.Local().Format("2006-01-02 15:04:05"))
+	}
+	if details.StoppedReason != "" {
+		fmt.Fprintf(&b, "  %s %s\n", field("Stopped Reason"), details.StoppedReason)
+	}
+	if details.EC2InstanceID != "" {
+		fmt.Fprintf(&b, "  %s %s\n", field("EC2 Instance"), details.EC2InstanceID)
+	}
+	if details.PrivateIP != "" {
+		fmt.Fprintf(&b, "  %s %s\n", field("Private IP"), details.PrivateIP)
+	}
+	if details.PublicIP != "" {
+		fmt.Fprintf(&b, "  %s %s\n", field("Public IP"), details.PublicIP)
+	}
+
+	// Console URLs
+	region := details.Region
+	if region != "" {
+		fmt.Fprintf(&b, "\n")
+		if details.EC2InstanceID != "" {
+			fmt.Fprintf(&b, "  EC2 Console:\n")
+			fmt.Fprintf(&b, "  https://%s.console.aws.amazon.com/ec2/v2/home?region=%s#Instances:instanceId=%s\n", region, region, details.EC2InstanceID)
+			fmt.Fprintf(&b, "\n")
+		}
+		if details.ClusterName != "" {
+			fmt.Fprintf(&b, "  Task Console:\n")
+			fmt.Fprintf(&b, "  https://%s.console.aws.amazon.com/ecs/home?region=%s#/clusters/%s/tasks/%s\n", region, region, details.ClusterName, details.ID)
+			fmt.Fprintf(&b, "\n")
+		}
+	}
+
+	// Containers
 	fmt.Fprintf(&b, "\n")
-	fmt.Fprintf(&b, "%s\n", header("CONTAINERS"))
+	fmt.Fprintf(&b, " %s\n\n", header("Containers"))
 	for _, c := range details.Containers {
-		fmt.Fprintf(&b, "  %s:  %s\n", field("Name"), c.Name)
-		fmt.Fprintf(&b, "  %s:  %s\n", field("Status"), c.Status)
-		fmt.Fprintf(&b, "  %s:  %s\n", field("Health"), c.HealthStatus)
-		fmt.Fprintf(&b, "  %s:  %s\n", field("Image"), c.Image)
+		fmt.Fprintf(&b, "  %s\n", c.Name)
+		fmt.Fprintf(&b, "    Status: %s\n", c.Status)
+		if c.HealthStatus != "" && c.HealthStatus != "UNKNOWN" {
+			fmt.Fprintf(&b, "    Health: %s\n", c.HealthStatus)
+		}
+		fmt.Fprintf(&b, "    Image: %s\n", c.Image)
 		if c.ExitCode != nil {
-			fmt.Fprintf(&b, "  %s:  %d\n", field("Exit Code"), *c.ExitCode)
+			fmt.Fprintf(&b, "    Exit Code: %d\n", *c.ExitCode)
 		}
 		fmt.Fprintf(&b, "\n")
 	}
 	return b.String()
+}
+
+func formatUptime(started time.Time) string {
+	d := time.Since(started)
+	if d < 0 {
+		d = 0
+	}
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+	if hours > 24 {
+		days := hours / 24
+		hours = hours % 24
+		return fmt.Sprintf("%dd%dh%dm", days, hours, minutes)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh%dm", hours, minutes)
+	}
+	return fmt.Sprintf("%dm", minutes)
 }
 
 func (m *detailsPane) Zoom() tea.Cmd {
