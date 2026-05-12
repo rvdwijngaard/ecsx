@@ -9,8 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	appconfig "github.com/ron/ecsx/pkg"
-	pkgaws "github.com/ron/ecsx/pkg/aws"
-	"github.com/ron/ecsx/pkg/aws/ecs"
+	"github.com/ron/ecsx/pkg/configfile"
 	"github.com/ron/ecsx/pkg/ui"
 )
 
@@ -38,6 +37,7 @@ func init() {
 	var err error
 	configDir, err = os.UserConfigDir()
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not determine config directory: %v\n", err)
 		configDir = corrupt_config_dir
 	}
 }
@@ -57,7 +57,7 @@ func main() {
 	root.PersistentFlags().StringVar(&cluster, cluster_key, "", "ECS cluster name")
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable debug logging")
 
-	root.RegisterFlagCompletionFunc(cluster_key, completeClusters)
+	// root.RegisterFlagCompletionFunc(cluster_key, completeClusters)
 
 	// TODO: re-enable subcommands once migrated to pkg/ connectors
 	// root.AddCommand(logsCmd())
@@ -65,7 +65,7 @@ func main() {
 	// root.AddCommand(execCmd())
 	// root.AddCommand(taskCmd())
 	// root.AddCommand(containerEnvCmd())
-	root.AddCommand(completionCmd())
+	// root.AddCommand(completionCmd())
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
@@ -77,14 +77,15 @@ func runApplication(cmd *cobra.Command, args []string) error {
 
 	var uiopts []ui.Option
 
-	// Resolve profile: flag → env → default (nil)
-	resolvedProfile := resolveProfile()
-
-	// Resolve region: flag → env → default
-	resolvedRegion := resolveRegion()
+	cfgf, _, err := loadConfig(cfgPath)
+	if err != nil {
+		uiopts = append(uiopts, ui.WithInitialErrorNotification(err))
+	}
 
 	// Set up credentials channel for MFA token provider
 	credsC := make(chan appconfig.CredentialsResponse, 1)
+	defer close(credsC)
+
 	var p *tea.Program
 	mfaCB := func() (string, error) {
 		p.Send(appconfig.CredentialsRequest{})
@@ -93,72 +94,69 @@ func runApplication(cmd *cobra.Command, args []string) error {
 	}
 
 	cfg := appconfig.Config{
-		Profile:         resolvedProfile,
-		Region:          resolvedRegion,
-		Cluster:         cluster,
-		Verbose:         verbose,
+		Profile:          resolveProfile(cfgf),
+		Region:           resolveRegion(cfgf),
+		Cluster:          cluster,
+		Verbose:          verbose,
+		AvailableRegions: cfgf.AWSRegions,
+		StarredRegions:   cfgf.StarredRegions,
+		MaxTables:        cfgf.MaxTables,
+
 		MFACredentialCB: mfaCB,
 		MFACredentialC:  credsC,
 	}
 
-	// Load AWS config
-	awsCfg, err := pkgaws.LoadAWSConfig(ctx, cfg.Region, cfg.Profile, cfg.MFACredentialCB)
-	if err != nil {
-		return fmt.Errorf("failed to load AWS config: %w", err)
-	}
-
-	// Create ECS client
-	profileStr := ""
-	if cfg.Profile != nil {
-		profileStr = *cfg.Profile
-	}
-	ecsClient := ecs.NewClient(awsCfg, profileStr)
-	cfg.ECSClient = ecsClient.ECS
+	// AWS config loading and client creation is handled by the TUI's Init()
+	// method (see pkg/ui/home.go). This ensures `p` is assigned before MFA
+	// callbacks can fire, avoiding a nil-pointer panic.
 
 	p = tea.NewProgram(ui.NewModel(ctx, cfg, uiopts...))
 	_, err = p.Run()
 	return err
 }
 
-func resolveProfile() *string {
-	if profile != "" {
-		return &profile
+func loadConfig(path string) (configfile.ConfigFile, *configfile.ConfigManager, error) {
+	full, err1 := filepath.Abs(path)
+	if err1 != nil {
+		err1 = fmt.Errorf("failed to construct a valid config-path: %w", err1)
 	}
-	if p := os.Getenv("AWS_PROFILE"); p != "" {
-		return &p
+
+	configman := configfile.NewConfigManager(full)
+	cfgf, err2 := configman.LoadConfig(true)
+	if err1 != nil {
+		return cfgf, configman, err1
+	}
+	if err2 != nil {
+		return cfgf, configman, fmt.Errorf("failed to load local config: %w", err2)
+	}
+
+	return cfgf, configman, nil
+}
+
+func resolveProfile(cfg configfile.ConfigFile) *string {
+	if pr := profile; pr != "" {
+		return &pr
+	}
+	if pr := os.Getenv("AWS_PROFILE"); pr != "" {
+		return &pr
+	}
+	if pr := cfg.DefaultProfile; pr != "" {
+		return &pr
 	}
 	return nil
 }
 
-func resolveRegion() string {
-	if region != "" {
-		return region
+func resolveRegion(cfg configfile.ConfigFile) string {
+	if r := region; r != "" {
+		return r
 	}
 	if r := os.Getenv("AWS_REGION"); r != "" {
+		return r
+	}
+	if r := cfg.DefaultRegion; r != "" {
 		return r
 	}
 	return "us-east-1"
 }
 
-func completionCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:       "completion [bash|zsh|fish|powershell]",
-		Short:     "Output shell completion script",
-		Args:      cobra.ExactArgs(1),
-		ValidArgs: []string{"bash", "zsh", "fish", "powershell"},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			switch args[0] {
-			case "bash":
-				return cmd.Root().GenBashCompletionV2(os.Stdout, true)
-			case "zsh":
-				return cmd.Root().GenZshCompletion(os.Stdout)
-			case "fish":
-				return cmd.Root().GenFishCompletion(os.Stdout, true)
-			case "powershell":
-				return cmd.Root().GenPowerShellCompletionWithDesc(os.Stdout)
-			default:
-				return fmt.Errorf("unsupported shell: %s", args[0])
-			}
-		},
-	}
-}
+
