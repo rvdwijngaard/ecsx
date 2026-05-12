@@ -1,4 +1,4 @@
-package clusterselection
+package itemselection
 
 import (
 	"context"
@@ -9,42 +9,38 @@ import (
 	"charm.land/lipgloss/v2"
 
 	appconfig "github.com/ron/ecsx/pkg"
-	"github.com/ron/ecsx/pkg/aws/ecs"
 	"github.com/ron/ecsx/pkg/ui/internal/messages"
 	"github.com/ron/ecsx/pkg/ui/internal/styles"
 	"github.com/ron/ecsx/pkg/ui/internal/views/util/keymaps"
-	u "github.com/ron/ecsx/pkg/util"
 )
 
 type paneID int
 
 const (
-	tablePaneID paneID = iota
+	itemsPaneID paneID = iota
 	detailsPaneID
 )
 
-type ClusterSelection struct {
+type ItemSelection struct {
 	// shared config
 	config *appconfig.Config
 
-	Client *ecs.Client
 	// view window
 	window struct {
 		width  int
 		height int
 	}
 
-	// key map
-	KeyMap *TableViewKeyMap
-
-	// Additional Keys
-	AddKeyMap keymaps.AdditionalKeys
-
 	// panes
-	tablePane   *tableSelectionPane
+	itemsPane   *ItemSelectionPane
 	detailsPane *detailsPane
 
 	zoomEnabled bool
+
+	KeyMap *ItemViewKeyMap
+
+	// Additional Keys
+	AddKeyMap keymaps.AdditionalKeys
 
 	focused    paneID
 	zoomtarget paneID
@@ -55,44 +51,43 @@ var (
 	focusedStyle = styles.FocusedBorderStyle
 )
 
-func (m *ClusterSelection) renderBorder(paneID paneID, content string) string {
+func (m *ItemSelection) renderBorder(paneID paneID, content string) string {
 	if m.focused == paneID {
 		return focusedStyle.Render(content)
 	}
 	return borderStyle.Render(content)
 }
 
-type Option func(t *ClusterSelection)
+type Option func(t *ItemSelection)
 
 func WithAdditionalKeys(keys keymaps.AdditionalKeys) Option {
-	return func(t *ClusterSelection) {
+	return func(t *ItemSelection) {
 		t.AddKeyMap = keys
 	}
 }
 
-func NewTableSelectionView(ctx context.Context, client *ecs.Client, config *appconfig.Config, opts ...Option) *ClusterSelection {
-	t := &ClusterSelection{
+func NewItemSelectionView(ctx context.Context, config *appconfig.Config, opts ...Option) *ItemSelection {
+	i := &ItemSelection{
 		config: config,
-		KeyMap: DefaultTableViewKeyMap(),
+		KeyMap: DefaultItemViewKeyMap(),
 	}
-
 	for _, o := range opts {
-		o(t)
+		o(i)
 	}
 
-	t.tablePane = newTableSelectionPane(ctx, client, config, withTablePaneKeys(t.AddKeyMap))
-	t.detailsPane = newDetailsPane(ctx, config, withDetailsPaneKeys(t.AddKeyMap))
+	i.itemsPane = newItemSelectionPane(ctx, config, withItemsPaneKeys(i.AddKeyMap))
+	i.detailsPane = newDetailsPane(ctx, config, withDetailsPaneKeys(i.AddKeyMap))
 
-	return t
+	return i
 }
 
-func (m *ClusterSelection) Init() tea.Cmd {
-	return tea.Batch(m.tablePane.Init(), m.detailsPane.Init())
+func (m *ItemSelection) Init() tea.Cmd {
+	return m.itemsPane.Init()
 }
 
 // update handles the message and if it does not detect a keypress that it can
 // map itself proceeds to forward the message to the model's children
-func (m *ClusterSelection) Update(msg tea.Msg) tea.Cmd {
+func (m *ItemSelection) Update(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
@@ -100,14 +95,12 @@ func (m *ClusterSelection) Update(msg tea.Msg) tea.Cmd {
 		case key.Matches(msg, m.KeyMap.MoveFocus):
 			m.moveFocus()
 			return nil
-		case key.Matches(msg, m.KeyMap.Regions):
-			return m.ToggleRegionsDialog()
 		}
 	case tea.WindowSizeMsg:
 		m.window.height = msg.Height
 		m.window.width = msg.Width
 		m.applySize()
-	case messages.ZoomToggleTableSelectionPane, messages.ZoomToggleTableDetailsPane:
+	case messages.ZoomToggleItemSelectionPane, messages.ZoomToggleItemDetailsPane:
 		cmd = m.handleZoom(msg)
 	}
 
@@ -116,7 +109,7 @@ func (m *ClusterSelection) Update(msg tea.Msg) tea.Cmd {
 
 // forward takes a message and decides to broadcast or to forward only to focused
 // children
-func (m *ClusterSelection) forward(msg tea.Msg) tea.Cmd {
+func (m *ItemSelection) forward(msg tea.Msg) tea.Cmd {
 	if _, isKeyPress := msg.(tea.KeyPressMsg); isKeyPress {
 		return m.routeToFocusedOnly(msg)
 	}
@@ -124,34 +117,33 @@ func (m *ClusterSelection) forward(msg tea.Msg) tea.Cmd {
 }
 
 // broadcast takes a message and forwards it to all children
-func (m ClusterSelection) broadcast(msg tea.Msg) tea.Cmd {
+func (m ItemSelection) broadcast(msg tea.Msg) tea.Cmd {
 	cmds := []tea.Cmd{}
-	cmds = append(cmds, m.tablePane.Update(msg))
+	cmds = append(cmds, m.itemsPane.Update(msg))
 	cmds = append(cmds, m.detailsPane.Update(msg))
 	return tea.Batch(cmds...)
 }
 
 // routeToFocusedOnly takes a message and only routes it to a single child, the
 // active child with highest precedence (dialogs take precedence over views)
-func (m *ClusterSelection) routeToFocusedOnly(msg tea.Msg) tea.Cmd {
+func (m *ItemSelection) routeToFocusedOnly(msg tea.Msg) tea.Cmd {
 	switch m.focused {
-	case tablePaneID:
-		return m.tablePane.Update(msg)
+	case itemsPaneID:
+		return m.itemsPane.Update(msg)
 	case detailsPaneID:
 		return m.detailsPane.Update(msg)
 	default:
 		panic("focused pane not found")
 	}
 }
-
-func (m *ClusterSelection) handleZoom(msg tea.Msg) tea.Cmd {
+func (m *ItemSelection) handleZoom(msg tea.Msg) tea.Cmd {
 	switch msg.(type) {
-	case messages.ZoomToggleTableSelectionPane:
+	case messages.ZoomToggleItemSelectionPane:
 		m.zoomEnabled = !m.zoomEnabled
-		m.zoomtarget = tablePaneID
-		m.focused = tablePaneID
+		m.zoomtarget = itemsPaneID
+		m.focused = itemsPaneID
 		m.KeyMap.MoveFocus.SetEnabled(!m.KeyMap.MoveFocus.Enabled())
-	case messages.ZoomToggleTableDetailsPane:
+	case messages.ZoomToggleItemDetailsPane:
 		m.zoomEnabled = !m.zoomEnabled
 		m.zoomtarget = detailsPaneID
 		m.focused = detailsPaneID
@@ -161,14 +153,15 @@ func (m *ClusterSelection) handleZoom(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-func (m ClusterSelection) ToggleRegionsDialog() tea.Cmd {
-	return func() tea.Msg {
-		return messages.ToggleRegions{}
+func (m *ItemSelection) moveFocus() {
+	m.focused++
+	if m.focused > detailsPaneID {
+		m.focused = itemsPaneID
 	}
 }
 
-func (m *ClusterSelection) applySize() {
-	w := u.Ternary(m.window.width, m.window.width/2, m.zoomEnabled)
+func (m *ItemSelection) applySize() {
+	w := ternary(m.window.width, m.window.width/2, m.zoomEnabled)
 	borderStyle = borderStyle.
 		Height(m.window.height - 2).
 		Width(w)
@@ -177,22 +170,15 @@ func (m *ClusterSelection) applySize() {
 		Height(m.window.height - 2).
 		Width(w)
 
-	m.tablePane.applySize(m.window.height-2-3, w-4)
+	m.itemsPane.applySize(m.window.height-2-3, w-4)
 	m.detailsPane.applySize(m.window.height-2-3, w-4)
 }
 
-func (m *ClusterSelection) moveFocus() {
-	m.focused++
-	if m.focused > detailsPaneID {
-		m.focused = tablePaneID
-	}
-}
-
-func (m *ClusterSelection) View() string {
+func (m *ItemSelection) View() string {
 	s := strings.Builder{}
 	s.WriteString(lipgloss.JoinHorizontal(lipgloss.Top,
-		u.Ternary(m.renderBorder(tablePaneID, m.tablePane.View()), "", !m.zoomEnabled || m.zoomtarget == tablePaneID),
-		u.Ternary(m.renderBorder(detailsPaneID, m.detailsPane.View()), "", !m.zoomEnabled || m.zoomtarget == detailsPaneID),
+		ternary(m.renderBorder(itemsPaneID, m.itemsPane.View()), "", !m.zoomEnabled || m.zoomtarget == itemsPaneID),
+		ternary(m.renderBorder(detailsPaneID, m.detailsPane.View()), "", !m.zoomEnabled || m.zoomtarget == detailsPaneID),
 	))
 	return s.String()
 }

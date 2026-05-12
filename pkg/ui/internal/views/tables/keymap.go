@@ -1,4 +1,4 @@
-package clusterselection
+package tableselection
 
 import "charm.land/bubbles/v2/key"
 
@@ -99,7 +99,7 @@ type DialogKeyMaps struct {
 	RegionDialog key.Binding
 }
 
-func (m *ClusterSelection) DialogKeyMaps() DialogKeyMaps {
+func (m *TableSelection) DialogKeyMaps() DialogKeyMaps {
 	return DialogKeyMaps{
 		RegionDialog: m.KeyMap.Regions,
 	}
