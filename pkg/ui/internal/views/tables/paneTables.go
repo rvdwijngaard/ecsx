@@ -315,6 +315,18 @@ func (m *tableSelectionPane) Update(msg tea.Msg) tea.Cmd {
 	case messages.TableDetails:
 		m.details = msg.Details
 		return nil
+	case messages.ServiceDetails:
+		return nil
+	case messages.TaskDetails:
+		return nil
+	case messages.ServicePageReady:
+		return nil
+	case messages.TaskPageReady:
+		return nil
+	case messages.ClusterDetails:
+		return nil
+	case messages.ClusterPageReady:
+		return nil
 	case messages.SwitchView:
 		if msg.NewView != messages.Table_selection {
 			return nil

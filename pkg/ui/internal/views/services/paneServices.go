@@ -283,6 +283,14 @@ func (m *serviceSelectionPane) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case messages.ServiceDetails:
 		return nil
+	case messages.TaskDetails:
+		return nil
+	case messages.TaskPageReady:
+		return nil
+	case messages.ClusterDetails:
+		return nil
+	case messages.ClusterPageReady:
+		return nil
 	case messages.SelectCluster:
 		return m.selectCluster(msg.ClusterName)
 	case messages.ServicePageReady:
@@ -320,6 +328,46 @@ func (m *serviceSelectionPane) selectCluster(clusterName string) tea.Cmd {
 	return m.loadServices()
 }
 
+func (m *serviceSelectionPane) selectService() tea.Cmd {
+	m.cancelDetails()
+	m.cancelServices()
+	rowP := m.content.SelectedRow()
+	if rowP == nil {
+		return nil
+	}
+	row := *rowP
+	if len(row) == 0 {
+		return nil
+	}
+
+	serviceName := row[0].Value()
+	var details *apitypes.ServiceItem
+	for i := range m.services {
+		if m.services[i].Name == serviceName {
+			details = &m.services[i]
+			break
+		}
+	}
+	if details == nil {
+		return nil
+	}
+
+	switchView := func() tea.Msg {
+		return messages.SwitchView{
+			OldView: messages.Service_selection,
+			NewView: messages.Task_selection,
+		}
+	}
+	selectService := func() tea.Msg {
+		return messages.SelectService{
+			ClusterName: m.clusterName,
+			ServiceName: serviceName,
+			Details:     *details,
+		}
+	}
+	return tea.Batch(switchView, selectService)
+}
+
 // handleNavigation handles events when search is not active.
 func (m *serviceSelectionPane) handleNavigation(msg tea.Msg) tea.Cmd {
 	cmds := []tea.Cmd{}
@@ -329,8 +377,7 @@ func (m *serviceSelectionPane) handleNavigation(msg tea.Msg) tea.Cmd {
 		case key.Matches(msg, m.KeyMap.Search):
 			cmds = append(cmds, m.search.OpenSearchBox())
 		case key.Matches(msg, m.KeyMap.Select):
-			// TODO: future — navigate into tasks for a service
-			return nil
+			return m.selectService()
 		case key.Matches(msg, m.KeyMap.Zoom):
 			return m.Zoom()
 		case key.Matches(msg, m.KeyMap.Esc):
@@ -419,6 +466,10 @@ func (m *serviceSelectionPane) copy() tea.Cmd {
 // MaybePreviewService sends a ServiceDetails message for the currently selected service.
 func (m *serviceSelectionPane) MaybePreviewService(force bool) tea.Cmd {
 	if len(m.services) == 0 || (m.filtering.enabled && len(m.filtering.matchedServices) == 0) {
+		if m.lastServiceDetails == -1 && !force {
+			return nil
+		}
+		m.lastServiceDetails = -1
 		return func() tea.Msg {
 			return messages.ServiceDetails{
 				Details: nil,

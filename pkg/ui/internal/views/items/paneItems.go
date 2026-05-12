@@ -340,6 +340,12 @@ func (m *ItemSelectionPane) softReset() tea.Cmd {
 }
 
 func (m *ItemSelectionPane) Update(msg tea.Msg) (cmd tea.Cmd) {
+	// Short-circuit messages from other views to avoid broadcast loops
+	switch msg.(type) {
+	case messages.ServiceDetails, messages.TaskDetails, messages.ServicePageReady, messages.TaskPageReady, messages.ClusterDetails, messages.ClusterPageReady:
+		return nil
+	}
+
 	cmds := []tea.Cmd{}
 	_, isSelect := msg.(messages.SelectTable)
 	_, isToggleFmt := msg.(messages.ToggleJSONYAML)

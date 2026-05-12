@@ -39,9 +39,10 @@ type Help struct {
 	tableSelection   help.KeyMap
 	itemselection    help.KeyMap
 	serviceSelection help.KeyMap
+	taskSelection    help.KeyMap
 }
 
-func NewHelp(tableView, itemView, serviceView help.KeyMap, close key.Binding) *Help {
+func NewHelp(tableView, itemView, serviceView, taskView help.KeyMap, close key.Binding) *Help {
 	h := &Help{
 		activeView: 0,
 
@@ -57,6 +58,7 @@ func NewHelp(tableView, itemView, serviceView help.KeyMap, close key.Binding) *H
 		tableSelection:   tableView,
 		itemselection:    itemView,
 		serviceSelection: serviceView,
+		taskSelection:    taskView,
 	}
 
 	h.width = h.defaultDialogWidth
@@ -110,6 +112,8 @@ func (m *Help) View() string {
 		fullhelp = m.Help.FullHelpView(m.tableSelection.FullHelp())
 	case messages.Service_selection:
 		fullhelp = m.Help.FullHelpView(m.serviceSelection.FullHelp())
+	case messages.Task_selection:
+		fullhelp = m.Help.FullHelpView(m.taskSelection.FullHelp())
 	}
 
 	helpHeight := height(fullhelp)
