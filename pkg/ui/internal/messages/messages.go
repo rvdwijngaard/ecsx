@@ -309,3 +309,26 @@ type ContainersResolvedForEditor struct {
 	Service    string
 	Containers []string
 }
+
+// --- Env vars messages ---
+
+type OpenEnvVars struct {
+	Cluster   string
+	Service   string
+	Container string // empty = pick first or show picker
+}
+
+type EnvVarsReady struct {
+	Cluster   string
+	Service   string
+	Container string
+	Err       error
+}
+
+type CloseEnvVars struct{}
+
+type ContainersResolvedForEnv struct {
+	Cluster    string
+	Service    string
+	Containers []string
+}

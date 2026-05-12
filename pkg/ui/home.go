@@ -22,10 +22,12 @@ import (
 	"github.com/ron/ecsx/pkg/ui/internal/dialogs"
 	"github.com/ron/ecsx/pkg/ui/internal/messages"
 	cwladapter "github.com/ron/ecsx/pkg/ui/internal/adapters/cloudwatchlogs"
+	envvarsadapter "github.com/ron/ecsx/pkg/ui/internal/adapters/envvars"
 	commonstyles "github.com/ron/ecsx/pkg/ui/internal/styles"
 	clustersview "github.com/ron/ecsx/pkg/ui/internal/views/clusters"
 	itemsview "github.com/ron/ecsx/pkg/ui/internal/views/items"
 	logsview "github.com/ron/ecsx/pkg/ui/internal/views/logs"
+	envvarsview "github.com/ron/ecsx/pkg/ui/internal/views/envvars"
 	servicesview "github.com/ron/ecsx/pkg/ui/internal/views/services"
 	tasksview "github.com/ron/ecsx/pkg/ui/internal/views/tasks"
 	"github.com/ron/ecsx/pkg/ui/internal/views/util/keymaps"
@@ -41,6 +43,7 @@ const (
 	services_view
 	tasks_view
 	logs_view
+	envvars_view
 )
 
 const (
@@ -113,6 +116,7 @@ type Model struct {
 	serviceSelection  *servicesview.ServiceSelection
 	taskSelection     *tasksview.TaskSelection
 	logsView          *logsview.LogsView
+	envVarsView       *envvarsview.EnvVarsView
 
 	// help
 	Help help.Model
@@ -176,6 +180,7 @@ func NewModel(ctx context.Context, cfg appconfig.Config, opts ...Option) Model {
 		m.serviceSelection = servicesview.NewServiceSelectionView(ctx, &cfg, servicesview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
 		m.taskSelection = tasksview.NewTaskSelectionView(ctx, &cfg, tasksview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
 		m.logsView = logsview.NewLogsView(&cfg, logsview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
+		m.envVarsView = envvarsview.NewEnvVarsView(&cfg)
 	}
 
 	{ // cluster view bound dialogs
@@ -288,7 +293,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		} else {
 			// Need to resolve containers first
-			cmd = m.resolveContainers(msg.Cluster, msg.Service)
+			cmd = m.resolveContainers(msg.Cluster, msg.Service, resolvePurposeLogs)
 		}
 	case messages.ContainersResolved:
 		if len(msg.Containers) == 1 {
@@ -312,7 +317,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		} else if len(msg.Containers) > 1 {
 			// Multiple containers, show picker
-			m.dialogs.containerPicker.SetContainers(msg.Cluster, msg.Service, msg.Containers)
+			m.dialogs.containerPicker.SetContainers(msg.Cluster, msg.Service, msg.Containers, dialogs.PickerPurposeLogs)
 			m.dialogs.open = true
 			m.dialogs.active = container_picker_dialog
 		} else {
@@ -346,7 +351,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd = m.dialogs.logsCommand.Open(msg.Cluster, msg.Service, msg.Container, m.config.LogsViewer)
 		} else {
 			// Resolve containers first, then open editor
-			cmd = m.resolveContainersForEditor(msg.Cluster, msg.Service)
+			cmd = m.resolveContainers(msg.Cluster, msg.Service, resolvePurposeEditor)
 		}
 	case messages.ContainersResolvedForEditor:
 		if len(msg.Containers) == 1 {
@@ -376,6 +381,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			msg.Cluster, msg.Service, msg.Container,
 			msg.Period, msg.FilterPattern,
 		)
+	case messages.OpenEnvVars:
+		if msg.Container != "" {
+			m.activeView = envvars_view
+			m.envVarsView.ApplySize(m.window.height-1, m.window.width)
+			cmd = m.envVarsView.Open(msg.Cluster, msg.Service, msg.Container)
+		} else {
+			cmd = m.resolveContainers(msg.Cluster, msg.Service, resolvePurposeEnv)
+		}
+	case messages.ContainersResolvedForEnv:
+		if len(msg.Containers) == 1 {
+			m.activeView = envvars_view
+			m.envVarsView.ApplySize(m.window.height-1, m.window.width)
+			cmd = m.envVarsView.Open(msg.Cluster, msg.Service, msg.Containers[0])
+		} else if len(msg.Containers) > 1 {
+			// Multiple containers — show picker
+			m.dialogs.containerPicker.SetContainers(msg.Cluster, msg.Service, msg.Containers, dialogs.PickerPurposeEnvVars)
+			m.dialogs.open = true
+			m.dialogs.active = container_picker_dialog
+		} else {
+			cmd = func() tea.Msg {
+				return messages.ToggleNotificationDialog{
+					Error: fmt.Errorf("no containers found for service %s", msg.Service),
+				}
+			}
+		}
+	case messages.CloseEnvVars:
+		m.activeView = tasks_view
 	}
 
 	var fwdCmd tea.Cmd
@@ -402,6 +434,7 @@ func (m Model) broadcast(msg tea.Msg) (Model, tea.Cmd) {
 	cmds = append(cmds, m.serviceSelection.Update(msg))
 	cmds = append(cmds, m.taskSelection.Update(msg))
 	cmds = append(cmds, m.logsView.Update(msg))
+	cmds = append(cmds, m.envVarsView.Update(msg))
 
 	// dialogs
 	cmds = append(cmds, m.dialogs.help.Update(msg))
@@ -456,6 +489,8 @@ func (m Model) routeToActiveOnly(msg tea.Msg) (Model, tea.Cmd) {
 		return m, m.taskSelection.Update(msg)
 	case logs_view:
 		return m, m.logsView.Update(msg)
+	case envvars_view:
+		return m, m.envVarsView.Update(msg)
 	default:
 		log.Fatalf("could not identify active view '%d'", int(m.activeView))
 	}
@@ -479,34 +514,16 @@ func (m Model) switchRegion(oldr, newr string) (Model, tea.Cmd) {
 	return m, m.Init()
 }
 
-func (m Model) resolveContainers(cluster, service string) tea.Cmd {
-	config := m.config
-	return func() tea.Msg {
-		ecsClient := config.ECSClient
-		if ecsClient == nil {
-			return messages.ToggleNotificationDialog{
-				Error: fmt.Errorf("ECS client not available"),
-			}
-		}
-		groups, err := cwladapter.ResolveLogGroups(ecsClient, context.Background(), cluster, service)
-		if err != nil {
-			return messages.ToggleNotificationDialog{
-				Error: fmt.Errorf("resolving containers: %w", err),
-			}
-		}
-		containers := make([]string, len(groups))
-		for i, g := range groups {
-			containers[i] = g.Container
-		}
-		return messages.ContainersResolved{
-			Cluster:    cluster,
-			Service:    service,
-			Containers: containers,
-		}
-	}
-}
+// containerResolvePurpose determines what message to emit after resolving containers.
+type containerResolvePurpose int
 
-func (m Model) resolveContainersForEditor(cluster, service string) tea.Cmd {
+const (
+	resolvePurposeLogs containerResolvePurpose = iota
+	resolvePurposeEditor
+	resolvePurposeEnv
+)
+
+func (m Model) resolveContainers(cluster, service string, purpose containerResolvePurpose) tea.Cmd {
 	config := m.config
 	return func() tea.Msg {
 		ecsClient := config.ECSClient
@@ -515,20 +532,51 @@ func (m Model) resolveContainersForEditor(cluster, service string) tea.Cmd {
 				Error: fmt.Errorf("ECS client not available"),
 			}
 		}
-		groups, err := cwladapter.ResolveLogGroups(ecsClient, context.Background(), cluster, service)
+
+		var containers []string
+		var err error
+
+		if purpose == resolvePurposeEnv {
+			// For env vars, resolve all containers from task definition
+			containers, err = envvarsadapter.ResolveContainers(ecsClient, context.Background(), cluster, service)
+		} else {
+			// For logs, resolve only containers with CloudWatch log groups
+			groups, resolveErr := cwladapter.ResolveLogGroups(ecsClient, context.Background(), cluster, service)
+			if resolveErr != nil {
+				err = resolveErr
+			} else {
+				containers = make([]string, len(groups))
+				for i, g := range groups {
+					containers[i] = g.Container
+				}
+			}
+		}
+
 		if err != nil {
 			return messages.ToggleNotificationDialog{
 				Error: fmt.Errorf("resolving containers: %w", err),
 			}
 		}
-		containers := make([]string, len(groups))
-		for i, g := range groups {
-			containers[i] = g.Container
-		}
-		return messages.ContainersResolvedForEditor{
-			Cluster:    cluster,
-			Service:    service,
-			Containers: containers,
+
+		switch purpose {
+		case resolvePurposeEditor:
+			return messages.ContainersResolvedForEditor{
+				Cluster:    cluster,
+				Service:    service,
+				Containers: containers,
+			}
+		case resolvePurposeEnv:
+			return messages.ContainersResolvedForEnv{
+				Cluster:    cluster,
+				Service:    service,
+				Containers: containers,
+			}
+		default: // resolvePurposeLogs
+			return messages.ContainersResolved{
+				Cluster:    cluster,
+				Service:    service,
+				Containers: containers,
+			}
 		}
 	}
 }
@@ -698,6 +746,9 @@ func (m Model) View() tea.View {
 	case logs_view:
 		page = m.logsView.View()
 		help = m.Help.ShortHelpView(m.logsView.ShortHelp())
+	case envvars_view:
+		page = m.envVarsView.View()
+		help = m.Help.ShortHelpView(m.envVarsView.ShortHelp())
 	}
 
 	// assemble gutter

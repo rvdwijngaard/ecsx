@@ -23,6 +23,14 @@ func (h containerPickerKeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{h.close, h.enter}
 }
 
+// ContainerPickerPurpose determines what action to take after container selection.
+type ContainerPickerPurpose int
+
+const (
+	PickerPurposeLogs ContainerPickerPurpose = iota
+	PickerPurposeEnvVars
+)
+
 // ContainerPicker enables the user to select a container for log viewing.
 type ContainerPicker struct {
 	keyMap containerPickerKeyMap
@@ -35,9 +43,10 @@ type ContainerPicker struct {
 		height int
 	}
 
-	// context for the logs request
+	// context for the request
 	cluster string
 	service string
+	purpose ContainerPickerPurpose
 
 	// available containers
 	containers []string
@@ -127,10 +136,11 @@ func NewContainerPicker() *ContainerPicker {
 }
 
 // SetContainers configures the dialog with available containers and context.
-func (m *ContainerPicker) SetContainers(cluster, service string, containers []string) {
+func (m *ContainerPicker) SetContainers(cluster, service string, containers []string, purpose ContainerPickerPurpose) {
 	m.cluster = cluster
 	m.service = service
 	m.containers = containers
+	m.purpose = purpose
 
 	items := make([]list.Item, len(containers))
 	for i, c := range containers {
@@ -175,13 +185,23 @@ func (m *ContainerPicker) selectContainer() tea.Cmd {
 	selected := itm.(containerItem).name
 	cluster := m.cluster
 	service := m.service
+	purpose := m.purpose
 	return tea.Batch(
 		m.close(),
 		func() tea.Msg {
-			return messages.OpenLogs{
-				Cluster:   cluster,
-				Service:   service,
-				Container: selected,
+			switch purpose {
+			case PickerPurposeEnvVars:
+				return messages.OpenEnvVars{
+					Cluster:   cluster,
+					Service:   service,
+					Container: selected,
+				}
+			default:
+				return messages.OpenLogs{
+					Cluster:   cluster,
+					Service:   service,
+					Container: selected,
+				}
 			}
 		},
 	)

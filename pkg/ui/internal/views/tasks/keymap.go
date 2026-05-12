@@ -39,18 +39,19 @@ type TaskPaneKeyMap struct {
 	Reload      key.Binding
 	Logs        key.Binding
 	LogsCommand key.Binding
+	EnvVars     key.Binding
 	Esc         key.Binding
 }
 
 // ShortHelp implements the KeyMap interface.
 func (km *TaskPaneKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{km.Search, km.Zoom, km.Logs, km.LogsCommand, km.Reload, km.Esc}
+	return []key.Binding{km.Search, km.Zoom, km.Logs, km.LogsCommand, km.EnvVars, km.Reload, km.Esc}
 }
 
 // FullHelp implements the KeyMap interface.
 func (km *TaskPaneKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{km.Search, km.Zoom, km.Esc, km.Reload, km.Copy, km.Logs, km.LogsCommand},
+		{km.Search, km.Zoom, km.Esc, km.Reload, km.Copy, km.Logs, km.LogsCommand, km.EnvVars},
 	}
 }
 
@@ -80,6 +81,10 @@ func DefaultTaskPaneKeyMap() *TaskPaneKeyMap {
 		LogsCommand: key.NewBinding(
 			key.WithKeys("L"),
 			key.WithHelp("shift+l", "logs cmd"),
+		),
+		EnvVars: key.NewBinding(
+			key.WithKeys("e"),
+			key.WithHelp("e", "env vars"),
 		),
 		Esc: key.NewBinding(
 			key.WithKeys("esc"),

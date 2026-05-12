@@ -362,6 +362,8 @@ func (m *taskSelectionPane) handleNavigation(msg tea.Msg) tea.Cmd {
 			return m.openLogs()
 		case key.Matches(msg, m.KeyMap.LogsCommand):
 			return m.openLogsWithEditor()
+		case key.Matches(msg, m.KeyMap.EnvVars):
+			return m.openEnvVars()
 		default:
 			if match, call := m.AddKeyMap.Matches(msg); match {
 				return call
@@ -460,6 +462,22 @@ func (m *taskSelectionPane) openLogsWithEditor() tea.Cmd {
 	service := m.serviceName
 	return func() tea.Msg {
 		return messages.OpenLogsWithEditor{
+			Cluster:   cluster,
+			Service:   service,
+			Container: "",
+		}
+	}
+}
+
+// openEnvVars emits an OpenEnvVars message for the current service.
+func (m *taskSelectionPane) openEnvVars() tea.Cmd {
+	if m.clusterName == "" || m.serviceName == "" {
+		return nil
+	}
+	cluster := m.clusterName
+	service := m.serviceName
+	return func() tea.Msg {
+		return messages.OpenEnvVars{
 			Cluster:   cluster,
 			Service:   service,
 			Container: "",
