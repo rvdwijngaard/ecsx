@@ -6,20 +6,29 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 )
 
-// LoadConfig loads an AWS config with the given region and optional profile.
-func LoadConfig(ctx context.Context, region, profile string) (*aws.Config, error) {
-	var opts []func(*config.LoadOptions) error
-	if region != "" {
-		opts = append(opts, config.WithRegion(region))
+func MustLoadAWSConfig(ctx context.Context, region string, profile *string, tokenProvider func() (string, error)) *aws.Config {
+	cfg, err := LoadAWSConfig(ctx, region, profile, tokenProvider)
+	if err != nil {
+		panic(err)
 	}
-	if profile != "" {
-		opts = append(opts, config.WithSharedConfigProfile(profile))
+	return cfg
+}
+
+func LoadAWSConfig(ctx context.Context, region string, profile *string, tokenProvider func() (string, error)) (*aws.Config, error) {
+	opts := make([]func(*config.LoadOptions) error, 0, 1)
+	opts = append(opts, config.WithRegion(region))
+	if profile != nil && *profile != "" {
+		opts = append(opts, config.WithSharedConfigProfile(*profile))
+		opts = append(opts, config.WithAssumeRoleCredentialOptions(func(roleOpts *stscreds.AssumeRoleOptions) {
+			roleOpts.TokenProvider = tokenProvider
+		}))
 	}
 	cfg, err := config.LoadDefaultConfig(ctx, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("loading AWS config (region=%s, profile=%s): %w", region, profile, err)
+		return nil, fmt.Errorf("loading default config at %s: %w", region, err)
 	}
 	return &cfg, nil
 }

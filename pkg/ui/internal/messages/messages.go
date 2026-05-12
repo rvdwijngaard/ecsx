@@ -105,6 +105,15 @@ type ClusterPageReady struct {
 	Err      error
 }
 
+type ClusterDetails struct {
+	Details *apitypes2.ClusterItem
+}
+
+type SelectCluster struct {
+	ClusterName string
+	Details     apitypes2.ClusterItem
+}
+
 type TablePageReady struct {
 	Tables        []string
 	PaginationKey *string

@@ -22,3 +22,19 @@ func ListClusters(client *ecs.Client, ctx context.Context) ([]apitypes.ClusterIt
 	}
 	return items, nil
 }
+
+// DescribeCluster returns a single cluster's details for UI display.
+// It finds the cluster by name from the full list.
+func DescribeCluster(client *ecs.Client, ctx context.Context, clusterName string) (*apitypes.ClusterItem, error) {
+	clusters, err := connector.ListClusters(client, ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range clusters {
+		if c.Name == clusterName {
+			item := apitypes.ClusterFromConnector(c)
+			return &item, nil
+		}
+	}
+	return nil, nil
+}

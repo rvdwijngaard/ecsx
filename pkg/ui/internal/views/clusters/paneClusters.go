@@ -14,13 +14,9 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/atotto/clipboard"
-	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
-	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
-	"github.com/samber/lo"
 
 	appconfig "github.com/ron/ecsx/pkg"
-	"github.com/ron/ecsx/pkg/aws/ecs"
-	"github.com/ron/ecsx/pkg/ui/internal/adapters/dynamodb"
+	ecsadapter "github.com/ron/ecsx/pkg/ui/internal/adapters/ecs"
 	apitypes "github.com/ron/ecsx/pkg/ui/internal/adapters/ecs/types"
 	"github.com/ron/ecsx/pkg/ui/internal/components/search"
 	"github.com/ron/ecsx/pkg/ui/internal/components/table"
@@ -30,20 +26,21 @@ import (
 	u "github.com/ron/ecsx/pkg/util"
 )
 
-type TableStyles struct {
+type ClusterTableStyles struct {
 	SelectedBackground    color.Color
 	SearchMatchBackground color.Color
 }
 
-type tableSelectionPane struct {
+type clusterSelectionPane struct {
 	// top-level context
 	ctx context.Context
 
-	client *awsecs.Client
+	// shared config (ECS client accessed via config.ECSClient)
+	config *appconfig.Config
 
 	// styles
 	styles struct {
-		Table TableStyles
+		Table ClusterTableStyles
 	}
 
 	// spinner
@@ -52,19 +49,13 @@ type tableSelectionPane struct {
 		model  spinner.Model
 		text   string
 	}
+
 	// cancel last call context (debounce)
 	cancelDetails func()
 	debounceDur   time.Duration
 
-	// paging tables
-	cancelTables func()
-	lastPageKey  *string
-
 	// standard timeout
 	stdTO time.Duration
-
-	// shared config
-	config *appconfig.Config
 
 	// errorText
 	err error
@@ -79,56 +70,51 @@ type tableSelectionPane struct {
 	search *search.SearchBox
 
 	// key map
-	KeyMap *TablePaneKeyMap
+	KeyMap *ClusterPaneKeyMap
 
 	// Additional Keys
 	AddKeyMap keymaps.AdditionalKeys
 
-	// the underlying table
+	// the underlying table component
 	content *table.Model
 
-	// the table-names retrieved from dynamodb
-	tables []string
+	// the clusters retrieved from ECS
+	clusters []apitypes.ClusterItem
 
 	// filtering parameters
-	tablefiltering struct {
-		matchedTables []int   // indices referring to tables
-		matchedRunes  [][]int //matches by index to tablefiltering.mathedTables
-		enabled       bool
+	filtering struct {
+		matchedClusters []int   // indices referring to clusters
+		matchedRunes    [][]int // matches by index to filtering.matchedClusters
+		enabled         bool
 	}
 
-	// index to most recently received table details
-	lastTableDetails int // index
-
-	// table details
-	details *apitypes.ClusterItem
+	// index to most recently previewed cluster
+	lastClusterDetails int
 }
 
-type tablePaneOption func(p *tableSelectionPane)
+type clusterPaneOption func(p *clusterSelectionPane)
 
-// withTablePaneKeys
-func withTablePaneKeys(keys keymaps.AdditionalKeys) tablePaneOption {
-	return func(t *tableSelectionPane) {
+func withClusterPaneKeys(keys keymaps.AdditionalKeys) clusterPaneOption {
+	return func(t *clusterSelectionPane) {
 		t.AddKeyMap = keys
 	}
 }
 
-func newTableSelectionPane(ctx context.Context, client *ecs.Client, config *appconfig.Config, opts ...tablePaneOption) *tableSelectionPane {
-	p := &tableSelectionPane{
+func newClusterSelectionPane(ctx context.Context, config *appconfig.Config, opts ...clusterPaneOption) *clusterSelectionPane {
+	p := &clusterSelectionPane{
 		ctx:           ctx,
-		cancelDetails: func() {}, // noop on init
-		cancelTables:  func() {}, // noop on init
-		debounceDur:   50 * time.Millisecond,
 		config:        config,
+		cancelDetails: func() {}, // noop on init
+		debounceDur:   50 * time.Millisecond,
 		stdTO:         30 * time.Second,
-		KeyMap:        DefaultTablePaneKeyMap(),
+		KeyMap:        DefaultClusterPaneKeyMap(),
 	}
 
 	{ // contents table
 		t := table.New(
-			table.WithColumns([]table.Column{{Title: "table-name", Width: 64}}),
+			table.WithColumns([]table.Column{{Title: "cluster-name", Width: 64}}),
 			table.WithFocused(true),
-			table.WithFieldDelegate(p.TableRowFieldDelegate),
+			table.WithFieldDelegate(p.ClusterRowFieldDelegate),
 		)
 		s := table.DefaultStyles()
 		s.Header = s.Header.
@@ -142,7 +128,7 @@ func newTableSelectionPane(ctx context.Context, client *ecs.Client, config *appc
 			Bold(false)
 		t.SetStyles(s)
 
-		st := TableStyles{
+		st := ClusterTableStyles{
 			SelectedBackground:    commonstyles.TableSelectedBg,
 			SearchMatchBackground: commonstyles.SearchHighlight,
 		}
@@ -158,7 +144,7 @@ func newTableSelectionPane(ctx context.Context, client *ecs.Client, config *appc
 			Foreground(lipgloss.Color("205")).
 			PaddingLeft(1)
 		p.spinner.model = sp
-		p.spinner.text = "obtaining next page..."
+		p.spinner.text = "loading clusters..."
 	}
 
 	{ // search box
@@ -168,33 +154,33 @@ func newTableSelectionPane(ctx context.Context, client *ecs.Client, config *appc
 					return table.Rows(p.content.Rows()).ToStrings()
 				},
 				EmptyInput: func() tea.Cmd {
-					p.tablefiltering.enabled = false
-					p.tablefiltering.matchedTables = make([]int, 0)
-					p.tablefiltering.matchedRunes = make([][]int, 0)
+					p.filtering.enabled = false
+					p.filtering.matchedClusters = make([]int, 0)
+					p.filtering.matchedRunes = make([][]int, 0)
 					p.content.ResetVirtualRows()
-					return p.MaybePreviewItem(true)
+					return p.MaybePreviewCluster(true)
 				},
 				Results: func(_ string, results []search.FilteredItem) tea.Cmd {
-					p.tablefiltering.enabled = true
-					p.tablefiltering.matchedTables = make([]int, len(results))
-					p.tablefiltering.matchedRunes = make([][]int, len(results))
+					p.filtering.enabled = true
+					p.filtering.matchedClusters = make([]int, len(results))
+					p.filtering.matchedRunes = make([][]int, len(results))
 					rows := p.content.Rows()
 					filtered := make([]table.Row, len(results))
 					for i, match := range results {
 						filtered[i] = rows[match.Index]
-						p.tablefiltering.matchedTables[i] = match.Index
-						p.tablefiltering.matchedRunes[i] = match.Matches
+						p.filtering.matchedClusters[i] = match.Index
+						p.filtering.matchedRunes[i] = match.Matches
 					}
 					p.content.SetVirtualRows(filtered)
 					return nil
 				},
 				Reset: func(searchHeight int) tea.Cmd {
-					p.tablefiltering.enabled = false
-					p.tablefiltering.matchedTables = make([]int, 0)
-					p.tablefiltering.matchedRunes = make([][]int, 0)
+					p.filtering.enabled = false
+					p.filtering.matchedClusters = make([]int, 0)
+					p.filtering.matchedRunes = make([][]int, 0)
 					p.content.ResetVirtualRows()
 					p.updateSize()
-					return p.MaybePreviewItem(true)
+					return p.MaybePreviewCluster(true)
 				},
 				SearchBoxOpens: func(searchHeight int) tea.Cmd {
 					p.updateSize()
@@ -215,145 +201,76 @@ func newTableSelectionPane(ctx context.Context, client *ecs.Client, config *appc
 	return p
 }
 
-func (m *tableSelectionPane) cleanSlate() {
+func (m *clusterSelectionPane) cleanSlate() {
 	m.err = nil
 }
 
-func (m *tableSelectionPane) Init() tea.Cmd {
+func (m *clusterSelectionPane) Init() tea.Cmd {
 	m.search.Reset()
 	m.content.ResetVirtualRows()
 	m.content.SetCursor(0)
 	m.cleanSlate()
-	m.lastPageKey = nil
-	m.tables = []string{}
+	m.clusters = []apitypes.ClusterItem{}
 
 	// cancel any lingering calls
-	m.cancelTables()
 	m.cancelDetails()
-	// return m.pageNext(true)
 	return m.loadClusters()
 }
 
-func (m *tableSelectionPane) loadClusters() tea.Cmd {
+func (m *clusterSelectionPane) loadClusters() tea.Cmd {
 	spinnerCmd := m.activateSpinner()
 	m.updateSize()
 
-	client := m.client
+	client := m.config.ECSClient
 	ctx, cc := context.WithTimeout(m.ctx, m.stdTO)
-	m.cancelTables = cc
+	_ = cc // timeout will cancel automatically
 
 	return tea.Batch(func() tea.Msg {
-		out, err := ecs.ListClusters(client, ctx)
-		msg := messages.ClusterPageReady{
-			Err: err,
+		clusters, err := ecsadapter.ListClusters(client, ctx)
+		return messages.ClusterPageReady{
+			Clusters: clusters,
+			Err:      err,
 		}
-		if out != nil {
-			msg.Clusters = lo.Map(out, func(c types.Cluster, _ int) apitypes.ClusterItem {
-				return apitypes.ClusterItem{
-					Name: *c.ClusterName,
-				}
-			})
-		}
-		return msg
 	}, spinnerCmd)
-
 }
 
-func (m *tableSelectionPane) activateSpinner() tea.Cmd {
+func (m *clusterSelectionPane) activateSpinner() tea.Cmd {
 	m.spinner.active = true
 	m.updateSize()
 	return m.spinner.model.Tick
 }
 
-func (m *tableSelectionPane) deactivateSpinner() {
+func (m *clusterSelectionPane) deactivateSpinner() {
 	m.spinner.active = false
 	m.updateSize()
 }
 
-// func (m *tableSelectionPane) pageNext(init bool) tea.Cmd {
-// 	spinnerCmd := m.activateSpinner()
-// 	if !init && m.lastPageKey == nil { // done paginating
-// 		m.deactivateSpinner()
-// 		return nil
-// 	}
-// 	client := m
-// 	region := m.config.Region
-// 	ctx, cc := context.WithTimeout(m.ctx, m.stdTO)
-// 	m.cancelTables = cc
-// 	page := func() tea.Msg {
-// 		defer cc()
-// 		limit := min(100, m.config.MaxTables-len(m.tables)) // 100 is max
-// 		if limit == 0 {
-// 			return nil
-// 		}
-// 		out, err := dynamodb.ListTables(client, ctx, apitypes.ListTablesRequest{
-// 			LastEvaluatedTableName: m.lastPageKey,
-// 			Limit:                  u.ToPtr(int32(limit)),
-// 		})
-//
-// 		msg := messages.TablePageReady{
-// 			Err:    err,
-// 			Region: region,
-// 		}
-// 		if out != nil {
-// 			msg.Tables = out.TableNames
-// 			msg.PaginationKey = out.LastEvaluatedTableName
-// 		}
-// 		return msg
-// 	}
-// 	return tea.Batch(page, spinnerCmd)
-// }
-
-func (m *tableSelectionPane) processPage(msg messages.TablePageReady, preview bool) tea.Cmd {
-	if msg.Region != m.config.Region { // expired
-		return nil
-	}
+func (m *clusterSelectionPane) processClusterPage(msg messages.ClusterPageReady) tea.Cmd {
+	m.deactivateSpinner()
 	if msg.Err != nil {
 		m.err = msg.Err
 		return nil
 	}
-	init := len(m.tables) == 0
-	newTables := msg.Tables
-	m.tables = append(m.tables, newTables...)
-	m.lastPageKey = msg.PaginationKey
+	m.clusters = msg.Clusters
 
-	// parse and set rows of the new tables
-	rows := make([]table.Row, len(newTables))
-	for i := range newTables {
+	rows := make([]table.Row, len(m.clusters))
+	for i, c := range m.clusters {
 		rows[i] = []table.Field{
-			enrichedField{value: newTables[i]},
+			enrichedField{value: c.Name},
 		}
 	}
-	if init {
-		m.content.SetRows(rows)
-	} else {
-		m.content.AppendRows(rows)
-	}
+	m.content.SetRows(rows)
 
-	// return commands
-	cmds := []tea.Cmd{}
-	if preview {
-		cmds = append(cmds, m.MaybePreviewItem(true))
-	}
-	// if len(m.tables) < m.config.MaxTables {
-	// 	cmds = append(cmds, m.pageNext(false))
-	// }
-	return tea.Batch(cmds...)
+	return m.MaybePreviewCluster(true)
 }
 
-func (m *tableSelectionPane) Update(msg tea.Msg) tea.Cmd {
+func (m *clusterSelectionPane) Update(msg tea.Msg) tea.Cmd {
 	cmds := []tea.Cmd{}
 	switch msg := msg.(type) {
-	case messages.TableDetails:
-		m.details = msg.Details
+	case messages.ClusterDetails:
 		return nil
-	case messages.SwitchView:
-		if msg.NewView != messages.Table_selection {
-			return nil
-		}
-		return m.MaybePreviewItem(true)
-	case messages.TablePageReady:
-		return m.processPage(msg, len(m.tables) == 0)
+	case messages.ClusterPageReady:
+		return m.processClusterPage(msg)
 	case spinner.TickMsg:
 		if !m.spinner.active {
 			return nil
@@ -369,12 +286,12 @@ func (m *tableSelectionPane) Update(msg tea.Msg) tea.Cmd {
 		cmds = append(cmds, m.handleNavigation(msg))
 	}
 
-	cmds = append(cmds, m.MaybePreviewItem(false))
+	cmds = append(cmds, m.MaybePreviewCluster(false))
 	return tea.Batch(cmds...)
 }
 
 // handleNavigation handles events when search is not active.
-func (m *tableSelectionPane) handleNavigation(msg tea.Msg) tea.Cmd {
+func (m *clusterSelectionPane) handleNavigation(msg tea.Msg) tea.Cmd {
 	cmds := []tea.Cmd{}
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
@@ -382,7 +299,7 @@ func (m *tableSelectionPane) handleNavigation(msg tea.Msg) tea.Cmd {
 		case key.Matches(msg, m.KeyMap.Search):
 			cmds = append(cmds, m.search.OpenSearchBox())
 		case key.Matches(msg, m.KeyMap.Select):
-			return m.selectTable()
+			return m.selectCluster()
 		case key.Matches(msg, m.KeyMap.Zoom):
 			return m.Zoom()
 		case key.Matches(msg, m.KeyMap.Esc):
@@ -405,35 +322,29 @@ type enrichedField struct {
 	value string
 }
 
-// Value implements the matching table.Field interface function
+// Value implements the table.Field interface.
 func (f enrichedField) Value() string {
 	return f.value
 }
 
-func (m *tableSelectionPane) TableRowFieldDelegate(row table.Row, col table.Column, colIdx, rowIdx, colW, padL, padR int, selected bool) string {
+func (m *clusterSelectionPane) ClusterRowFieldDelegate(row table.Row, col table.Column, colIdx, rowIdx, colW, padL, padR int, selected bool) string {
 	fullWidth := colW + padL + padR
 
-	// obtain field in question
 	field := row[colIdx].(enrichedField)
 
 	enforceWidth := lipgloss.NewStyle().Width(fullWidth).MaxWidth(fullWidth).Inline(true).Render
 	padding := lipgloss.NewStyle().Padding(0, 1).Render
 
-	// no special styling if not selected or no filtering is applied
-	if !selected && (!m.tablefiltering.enabled) {
+	if !selected && !m.filtering.enabled {
 		return padding(enforceWidth(field.value))
 	}
 
-	// empty style to start with
 	style := commonstyles.LineStyle{}.AppendStringLG(field.value, lipgloss.NewStyle())
 
-	// add padding
 	style = style.SetRightPaddingLast(padR)
 	style = style.SetLeftPaddingFirst(padL)
 
-	// apply background styling for selected row
 	if selected {
-		// fill up any remaining space
 		if len([]rune(field.value)) < fullWidth {
 			st, _ := style.GetAt(len([]rune(field.value)) - 1)
 			style = style.Override(len([]rune(field.value))-1, st.PaddingRight(fullWidth-len([]rune(field.value))))
@@ -441,9 +352,8 @@ func (m *tableSelectionPane) TableRowFieldDelegate(row table.Row, col table.Colu
 		style = style.SetBackgroundAll(m.styles.Table.SelectedBackground)
 	}
 
-	// override background styling for search matches
-	if m.tablefiltering.enabled {
-		for _, idx := range m.tablefiltering.matchedRunes[rowIdx] {
+	if m.filtering.enabled {
+		for _, idx := range m.filtering.matchedRunes[rowIdx] {
 			runeStyle, _ := style.GetAt(idx)
 			c := m.styles.Table.SearchMatchBackground
 			if selected {
@@ -456,7 +366,7 @@ func (m *tableSelectionPane) TableRowFieldDelegate(row table.Row, col table.Colu
 	return enforceWidth(style.Render(field.value))
 }
 
-func (m *tableSelectionPane) copy() tea.Cmd {
+func (m *clusterSelectionPane) copy() tea.Cmd {
 	r := m.content.VisualRows()
 	c := max(0, m.content.Cursor())
 	if c >= len(r) {
@@ -471,104 +381,78 @@ func (m *tableSelectionPane) copy() tea.Cmd {
 	return notifyCopySuccess
 }
 
-// force is used on new pane initialization because lastPreviewItem could be 0
-func (m *tableSelectionPane) MaybePreviewItem(force bool) tea.Cmd {
-	if len(m.tables) == 0 || (m.tablefiltering.enabled && len(m.tablefiltering.matchedTables) == 0) {
+// MaybePreviewCluster sends a ClusterDetails message for the currently selected cluster.
+func (m *clusterSelectionPane) MaybePreviewCluster(force bool) tea.Cmd {
+	if len(m.clusters) == 0 || (m.filtering.enabled && len(m.filtering.matchedClusters) == 0) {
 		return func() tea.Msg {
-			return messages.TableDetails{
+			return messages.ClusterDetails{
 				Details: nil,
 			}
 		}
 	}
 
 	idx := m.content.Cursor()
-	if len(m.tablefiltering.matchedTables) > 0 { // cursor refers to filtered items
-		idx = m.tablefiltering.matchedTables[idx]
+	if m.filtering.enabled && len(m.filtering.matchedClusters) > 0 {
+		idx = m.filtering.matchedClusters[idx]
 	}
-	if idx == m.lastTableDetails && !force {
+	if idx == m.lastClusterDetails && !force {
 		return nil
 	}
-	m.lastTableDetails = idx
-	table := m.tables[idx]
-
-	// prepare debounce cancellation
-	m.cancelDetails()
-	ctx, cc := context.WithCancel(m.ctx)
-	m.cancelDetails = cc
+	m.lastClusterDetails = idx
+	cluster := m.clusters[idx]
 
 	return func() tea.Msg {
-		time.Sleep(m.debounceDur)
-		if ctx.Err() != nil { // context canceled
-			return nil // debounce
-		}
-
-		ctx, cc := context.WithTimeout(ctx, m.stdTO)
-		defer cc()
-		details, err := dynamodb.DescribeTable(m.config.Client, ctx, table)
-		if err != nil {
-			return nil
-		}
-
-		return messages.TableDetails{
-			Details: details,
+		return messages.ClusterDetails{
+			Details: &cluster,
 		}
 	}
 }
 
-func (m *tableSelectionPane) Zoom() tea.Cmd {
+func (m *clusterSelectionPane) Zoom() tea.Cmd {
 	return func() tea.Msg {
 		return messages.ZoomToggleTableSelectionPane{}
 	}
 }
 
-func (m *tableSelectionPane) selectTable() tea.Cmd {
+func (m *clusterSelectionPane) selectCluster() tea.Cmd {
 	m.cancelDetails()
-	m.cancelTables()
-	switchView := func() tea.Msg {
-		return messages.SwitchView{
-			OldView: messages.Table_selection,
-			NewView: messages.Item_selection,
-		}
-	}
 	rowP := m.content.SelectedRow()
 	if rowP == nil {
 		return nil
 	}
 	row := *rowP
 	if len(row) == 0 {
-		return nil // nothing to select
+		return nil
 	}
-	if m.details == nil || (m.details.TableName != nil && *m.details.TableName != row[0].Value()) {
-		m.cleanSlate()
-		ctx, cc := context.WithTimeout(m.ctx, m.stdTO)
-		defer cc()
-		details, err := dynamodb.DescribeTable(m.config.Client, ctx, row[0].Value())
-		if err != nil {
-			m.err = err
-			return nil
-		}
-		m.details = details
-	}
-	details := m.details
 
-	selectTable := func() tea.Msg {
-		return messages.SelectTable{
-			TableName:    row[0].Value(),
-			TableDetails: *details,
+	// Find the cluster details
+	clusterName := row[0].Value()
+	var details *apitypes.ClusterItem
+	for i := range m.clusters {
+		if m.clusters[i].Name == clusterName {
+			details = &m.clusters[i]
+			break
 		}
 	}
-	return tea.Batch(switchView, selectTable)
+	if details == nil {
+		return nil
+	}
+
+	return func() tea.Msg {
+		return messages.SelectCluster{
+			ClusterName: clusterName,
+			Details:     *details,
+		}
+	}
 }
 
-func (m *tableSelectionPane) applySize(height, width int) {
+func (m *clusterSelectionPane) applySize(height, width int) {
 	m.window.height = height
 	m.window.width = width
 	m.updateSize()
 }
 
-// updateSize updates dimensions of the pane's contents based on the current
-// window dimensions.
-func (m *tableSelectionPane) updateSize() {
+func (m *clusterSelectionPane) updateSize() {
 	h, w := m.window.height, m.window.width
 
 	searchBoxH := u.Ternary(m.search.GetHeight(), 0, m.search.IsEnabled())
@@ -577,7 +461,7 @@ func (m *tableSelectionPane) updateSize() {
 	m.search.SetWidth(w)
 }
 
-func (m *tableSelectionPane) View() string {
+func (m *clusterSelectionPane) View() string {
 	if m.err != nil {
 		return m.err.Error()
 	}
@@ -589,13 +473,13 @@ func (m *tableSelectionPane) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, rendering...)
 }
 
-func (m *tableSelectionPane) noContentMessage() string {
+func (m *clusterSelectionPane) noContentMessage() string {
 	if m.spinner.active {
 		return ""
 	}
 	s := strings.Builder{}
 	fmt.Fprintf(&s, "==================================================\n")
-	fmt.Fprintf(&s, "             NO TABLES IN THIS REGION             \n")
+	fmt.Fprintf(&s, "             NO CLUSTERS FOUND                    \n")
 	fmt.Fprintf(&s, "==================================================\n")
 	return s.String()
 }

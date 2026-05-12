@@ -15,11 +15,12 @@ import (
 	appconfig "github.com/ron/ecsx/pkg"
 	"github.com/ron/ecsx/pkg/aws"
 	"github.com/ron/ecsx/pkg/aws/dynamodb"
+	ecsconnector "github.com/ron/ecsx/pkg/aws/ecs"
 	"github.com/ron/ecsx/pkg/ui/internal/dialogs"
 	"github.com/ron/ecsx/pkg/ui/internal/messages"
 	commonstyles "github.com/ron/ecsx/pkg/ui/internal/styles"
+	clustersview "github.com/ron/ecsx/pkg/ui/internal/views/clusters"
 	itemsview "github.com/ron/ecsx/pkg/ui/internal/views/items"
-	tablesview "github.com/ron/ecsx/pkg/ui/internal/views/tables"
 	"github.com/ron/ecsx/pkg/ui/internal/views/util/keymaps"
 	u "github.com/ron/ecsx/pkg/util"
 )
@@ -93,8 +94,8 @@ type Model struct {
 	config *appconfig.Config
 
 	// views
-	tableSelection *tablesview.TableSelection
-	itemselection  *itemsview.ItemSelection
+	clusterSelection *clustersview.ClusterSelection
+	itemselection    *itemsview.ItemSelection
 
 	// help
 	Help help.Model
@@ -145,14 +146,14 @@ func NewModel(ctx context.Context, cfg appconfig.Config, opts ...Option) Model {
 	}
 
 	{ // views
-		m.tableSelection = tablesview.NewTableSelectionView(ctx, &cfg, tablesview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
+		m.clusterSelection = clustersview.NewClusterSelectionView(ctx, &cfg, clustersview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
 		m.itemselection = itemsview.NewItemSelectionView(ctx, &cfg, itemsview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
 	}
 
-	{ // table view bound dialogs
-		tableViewDialogKeys := m.tableSelection.DialogKeyMaps()
-		m.dialogs.help = dialogs.NewHelp(m.tableSelection, m.itemselection, DialogCloseKeymapFrom(m.KeyMap.Help))
-		m.dialogs.region = dialogs.NewRegionsDialog(m.config.AvailableRegions, m.config.StarredRegions, m.config.Region, DialogCloseKeymapFrom(tableViewDialogKeys.RegionDialog))
+	{ // cluster view bound dialogs
+		clusterViewDialogKeys := m.clusterSelection.DialogKeyMaps()
+		m.dialogs.help = dialogs.NewHelp(m.clusterSelection, m.itemselection, DialogCloseKeymapFrom(m.KeyMap.Help))
+		m.dialogs.region = dialogs.NewRegionsDialog(m.config.AvailableRegions, m.config.StarredRegions, m.config.Region, DialogCloseKeymapFrom(clusterViewDialogKeys.RegionDialog))
 	}
 
 	{ // table view bound dialogs
@@ -185,7 +186,8 @@ func (m Model) Init() tea.Cmd {
 
 	// set and reinitialise
 	m.config.Client = dynamodb.NewClient(cfg, m.config.URL)
-	cmds = append(cmds, m.tableSelection.Init())
+	m.config.ECSClient = ecsconnector.NewClient(cfg, u.IfNotNil(m.config.Profile, "")).ECS
+	cmds = append(cmds, m.clusterSelection.Init())
 	cmds = append(cmds, m.itemselection.Init())
 
 	return tea.Batch(cmds...)
@@ -258,7 +260,7 @@ func (m Model) broadcast(msg tea.Msg) (Model, tea.Cmd) {
 	cmds := []tea.Cmd{}
 
 	// views
-	cmds = append(cmds, m.tableSelection.Update(msg))
+	cmds = append(cmds, m.clusterSelection.Update(msg))
 	cmds = append(cmds, m.itemselection.Update(msg))
 
 	// dialogs
@@ -301,7 +303,7 @@ func (m Model) routeToActiveOnly(msg tea.Msg) (Model, tea.Cmd) {
 
 	switch m.activeView {
 	case tables_view:
-		return m, m.tableSelection.Update(msg)
+		return m, m.clusterSelection.Update(msg)
 	case items_view:
 		return m, m.itemselection.Update(msg)
 	default:
@@ -472,8 +474,8 @@ func (m Model) View() tea.View {
 	var help string
 	switch m.activeView {
 	case tables_view:
-		page = m.tableSelection.View()
-		help = m.Help.ShortHelpView(m.tableSelection.ShortHelp())
+		page = m.clusterSelection.View()
+		help = m.Help.ShortHelpView(m.clusterSelection.ShortHelp())
 	case items_view:
 		page = m.itemselection.View()
 		help = m.Help.ShortHelpView(m.itemselection.ShortHelp())

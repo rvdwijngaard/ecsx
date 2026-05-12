@@ -17,5 +17,6 @@ Key rules:
 3. Each layer owns its own types — no reusing another layer's structs directly
 4. Adapters are stateless pure functions; all mutable state lives in Views
 5. Connectors are SDK-agnostic to callers — adapter shields UI from SDK changes
+6. Views hold a shared config pointer (`*appconfig.Config`) and read clients from it at call time — never store SDK clients directly on view structs (Bubble Tea value-receiver constraint)
 
 When adding new features, follow the file structure in architecture-pattern.md.

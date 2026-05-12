@@ -6,16 +6,16 @@ import "charm.land/bubbles/v2/key"
 func (m *ClusterSelection) ShortHelp() []key.Binding {
 	ah := appendShortHelp
 	switch m.focused {
-	case tablePaneID:
-		return ah(ah(m.tablePane.ShortHelp(), m.KeyMap.ShortHelp()), m.tablePane.AddKeyMap.Bindings())
+	case clusterPaneID:
+		return ah(ah(m.clusterPane.ShortHelp(), m.KeyMap.ShortHelp()), m.clusterPane.AddKeyMap.Bindings())
 	case detailsPaneID:
 		return ah(ah(m.detailsPane.ShortHelp(), m.KeyMap.ShortHelp()), m.detailsPane.AddKeyMap.Bindings())
 	}
 	return nil
 }
 
-// TABLE PANE
-func (m *tableSelectionPane) ShortHelp() []key.Binding {
+// CLUSTER PANE
+func (m *clusterSelectionPane) ShortHelp() []key.Binding {
 	return appendShortHelp(m.content.KeyMap.ShortHelp(), m.KeyMap.ShortHelp())
 }
 
@@ -29,16 +29,16 @@ func (m *detailsPane) ShortHelp() []key.Binding {
 // VIEW
 func (m *ClusterSelection) FullHelp() [][]key.Binding {
 	switch m.focused {
-	case tablePaneID:
-		return appendFullHelp(m.tablePane.FullHelp(), m.KeyMap.FullHelp())
+	case clusterPaneID:
+		return appendFullHelp(m.clusterPane.FullHelp(), m.KeyMap.FullHelp())
 	case detailsPaneID:
 		return appendFullHelp(m.detailsPane.FullHelp(), m.KeyMap.FullHelp())
 	}
 	return nil
 }
 
-// TABLE PANE
-func (m *tableSelectionPane) FullHelp() [][]key.Binding {
+// CLUSTER PANE
+func (m *clusterSelectionPane) FullHelp() [][]key.Binding {
 	return appendFullHelp(m.content.KeyMap.FullHelp(), m.KeyMap.FullHelp())
 }
 

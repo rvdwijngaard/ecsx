@@ -17,13 +17,13 @@ func completeWith(fn func(ctx context.Context, client *ecs.Client) ([]string, er
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
+		awsCfg, err := pkgaws.LoadAWSConfig(ctx, resolveRegion(), resolveProfile(), nil)
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
 		profileStr := ""
 		if p := resolveProfile(); p != nil {
 			profileStr = *p
-		}
-		awsCfg, err := pkgaws.LoadConfig(ctx, resolveRegion(), profileStr)
-		if err != nil {
-			return nil, cobra.ShellCompDirectiveError
 		}
 		ecsClient := ecsconnector.NewClient(awsCfg, profileStr)
 

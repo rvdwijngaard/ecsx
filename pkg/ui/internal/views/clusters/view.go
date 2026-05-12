@@ -9,7 +9,6 @@ import (
 	"charm.land/lipgloss/v2"
 
 	appconfig "github.com/ron/ecsx/pkg"
-	"github.com/ron/ecsx/pkg/aws/ecs"
 	"github.com/ron/ecsx/pkg/ui/internal/messages"
 	"github.com/ron/ecsx/pkg/ui/internal/styles"
 	"github.com/ron/ecsx/pkg/ui/internal/views/util/keymaps"
@@ -19,15 +18,11 @@ import (
 type paneID int
 
 const (
-	tablePaneID paneID = iota
+	clusterPaneID paneID = iota
 	detailsPaneID
 )
 
 type ClusterSelection struct {
-	// shared config
-	config *appconfig.Config
-
-	Client *ecs.Client
 	// view window
 	window struct {
 		width  int
@@ -35,13 +30,13 @@ type ClusterSelection struct {
 	}
 
 	// key map
-	KeyMap *TableViewKeyMap
+	KeyMap *ClusterViewKeyMap
 
 	// Additional Keys
 	AddKeyMap keymaps.AdditionalKeys
 
 	// panes
-	tablePane   *tableSelectionPane
+	clusterPane *clusterSelectionPane
 	detailsPane *detailsPane
 
 	zoomEnabled bool
@@ -70,28 +65,27 @@ func WithAdditionalKeys(keys keymaps.AdditionalKeys) Option {
 	}
 }
 
-func NewTableSelectionView(ctx context.Context, client *ecs.Client, config *appconfig.Config, opts ...Option) *ClusterSelection {
+func NewClusterSelectionView(ctx context.Context, config *appconfig.Config, opts ...Option) *ClusterSelection {
 	t := &ClusterSelection{
-		config: config,
-		KeyMap: DefaultTableViewKeyMap(),
+		KeyMap: DefaultClusterViewKeyMap(),
 	}
 
 	for _, o := range opts {
 		o(t)
 	}
 
-	t.tablePane = newTableSelectionPane(ctx, client, config, withTablePaneKeys(t.AddKeyMap))
-	t.detailsPane = newDetailsPane(ctx, config, withDetailsPaneKeys(t.AddKeyMap))
+	t.clusterPane = newClusterSelectionPane(ctx, config, withClusterPaneKeys(t.AddKeyMap))
+	t.detailsPane = newDetailsPane(withDetailsPaneKeys(t.AddKeyMap))
 
 	return t
 }
 
 func (m *ClusterSelection) Init() tea.Cmd {
-	return tea.Batch(m.tablePane.Init(), m.detailsPane.Init())
+	return tea.Batch(m.clusterPane.Init(), m.detailsPane.Init())
 }
 
-// update handles the message and if it does not detect a keypress that it can
-// map itself proceeds to forward the message to the model's children
+// Update handles the message and if it does not detect a keypress that it can
+// map itself proceeds to forward the message to the model's children.
 func (m *ClusterSelection) Update(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
@@ -114,8 +108,7 @@ func (m *ClusterSelection) Update(msg tea.Msg) tea.Cmd {
 	return tea.Batch(cmd, m.forward(msg))
 }
 
-// forward takes a message and decides to broadcast or to forward only to focused
-// children
+// forward takes a message and decides to broadcast or to forward only to focused children.
 func (m *ClusterSelection) forward(msg tea.Msg) tea.Cmd {
 	if _, isKeyPress := msg.(tea.KeyPressMsg); isKeyPress {
 		return m.routeToFocusedOnly(msg)
@@ -123,20 +116,19 @@ func (m *ClusterSelection) forward(msg tea.Msg) tea.Cmd {
 	return m.broadcast(msg)
 }
 
-// broadcast takes a message and forwards it to all children
+// broadcast takes a message and forwards it to all children.
 func (m ClusterSelection) broadcast(msg tea.Msg) tea.Cmd {
 	cmds := []tea.Cmd{}
-	cmds = append(cmds, m.tablePane.Update(msg))
+	cmds = append(cmds, m.clusterPane.Update(msg))
 	cmds = append(cmds, m.detailsPane.Update(msg))
 	return tea.Batch(cmds...)
 }
 
-// routeToFocusedOnly takes a message and only routes it to a single child, the
-// active child with highest precedence (dialogs take precedence over views)
+// routeToFocusedOnly takes a message and only routes it to the focused child.
 func (m *ClusterSelection) routeToFocusedOnly(msg tea.Msg) tea.Cmd {
 	switch m.focused {
-	case tablePaneID:
-		return m.tablePane.Update(msg)
+	case clusterPaneID:
+		return m.clusterPane.Update(msg)
 	case detailsPaneID:
 		return m.detailsPane.Update(msg)
 	default:
@@ -148,8 +140,8 @@ func (m *ClusterSelection) handleZoom(msg tea.Msg) tea.Cmd {
 	switch msg.(type) {
 	case messages.ZoomToggleTableSelectionPane:
 		m.zoomEnabled = !m.zoomEnabled
-		m.zoomtarget = tablePaneID
-		m.focused = tablePaneID
+		m.zoomtarget = clusterPaneID
+		m.focused = clusterPaneID
 		m.KeyMap.MoveFocus.SetEnabled(!m.KeyMap.MoveFocus.Enabled())
 	case messages.ZoomToggleTableDetailsPane:
 		m.zoomEnabled = !m.zoomEnabled
@@ -177,21 +169,21 @@ func (m *ClusterSelection) applySize() {
 		Height(m.window.height - 2).
 		Width(w)
 
-	m.tablePane.applySize(m.window.height-2-3, w-4)
+	m.clusterPane.applySize(m.window.height-2-3, w-4)
 	m.detailsPane.applySize(m.window.height-2-3, w-4)
 }
 
 func (m *ClusterSelection) moveFocus() {
 	m.focused++
 	if m.focused > detailsPaneID {
-		m.focused = tablePaneID
+		m.focused = clusterPaneID
 	}
 }
 
 func (m *ClusterSelection) View() string {
 	s := strings.Builder{}
 	s.WriteString(lipgloss.JoinHorizontal(lipgloss.Top,
-		u.Ternary(m.renderBorder(tablePaneID, m.tablePane.View()), "", !m.zoomEnabled || m.zoomtarget == tablePaneID),
+		u.Ternary(m.renderBorder(clusterPaneID, m.clusterPane.View()), "", !m.zoomEnabled || m.zoomtarget == clusterPaneID),
 		u.Ternary(m.renderBorder(detailsPaneID, m.detailsPane.View()), "", !m.zoomEnabled || m.zoomtarget == detailsPaneID),
 	))
 	return s.String()

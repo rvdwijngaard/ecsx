@@ -102,19 +102,20 @@ func runApplication(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load AWS config
-	profileStr := ""
-	if cfg.Profile != nil {
-		profileStr = *cfg.Profile
-	}
-	awsCfg, err := pkgaws.LoadConfig(ctx, cfg.Region, profileStr)
+	awsCfg, err := pkgaws.LoadAWSConfig(ctx, cfg.Region, cfg.Profile, cfg.MFACredentialCB)
 	if err != nil {
 		return fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
 	// Create ECS client
+	profileStr := ""
+	if cfg.Profile != nil {
+		profileStr = *cfg.Profile
+	}
 	ecsClient := ecs.NewClient(awsCfg, profileStr)
+	cfg.ECSClient = ecsClient.ECS
 
-	p = tea.NewProgram(ui.NewModel(ctx, cfg, ecsClient.ECS, uiopts...))
+	p = tea.NewProgram(ui.NewModel(ctx, cfg, uiopts...))
 	_, err = p.Run()
 	return err
 }

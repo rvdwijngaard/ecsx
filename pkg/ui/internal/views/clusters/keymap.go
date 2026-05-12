@@ -2,8 +2,7 @@ package clusterselection
 
 import "charm.land/bubbles/v2/key"
 
-// DetailsPaneKeyMap defines keybindings. It satisfies to the help.KeyMap interface, which
-// is used to render the help menu.
+// DetailsPaneKeyMap defines keybindings for the details pane.
 type DetailsPaneKeyMap struct {
 	Zoom key.Binding
 }
@@ -32,9 +31,8 @@ func DefaultDetailsKeyMap() *DetailsPaneKeyMap {
 
 // ------------------------------------------ //
 
-// TablePaneKeyMap defines keybindings. It satisfies to the help.KeyMap interface, which
-// is used to render the help menu.
-type TablePaneKeyMap struct {
+// ClusterPaneKeyMap defines keybindings for the cluster selection pane.
+type ClusterPaneKeyMap struct {
 	Select key.Binding
 	Search key.Binding
 	Zoom   key.Binding
@@ -44,20 +42,20 @@ type TablePaneKeyMap struct {
 }
 
 // ShortHelp implements the KeyMap interface.
-func (km *TablePaneKeyMap) ShortHelp() []key.Binding {
+func (km *ClusterPaneKeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{km.Select, km.Search, km.Zoom, km.Reload, km.Esc}
 }
 
 // FullHelp implements the KeyMap interface.
-func (km *TablePaneKeyMap) FullHelp() [][]key.Binding {
+func (km *ClusterPaneKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{km.Select, km.Search, km.Zoom, km.Esc, km.Reload, km.Copy},
 	}
 }
 
-// DefaultTablePaneKeyMap returns a default set of keybindings.
-func DefaultTablePaneKeyMap() *TablePaneKeyMap {
-	return &TablePaneKeyMap{
+// DefaultClusterPaneKeyMap returns a default set of keybindings.
+func DefaultClusterPaneKeyMap() *ClusterPaneKeyMap {
+	return &ClusterPaneKeyMap{
 		Select: key.NewBinding(
 			key.WithKeys("enter"),
 			key.WithHelp("enter", "select"),
@@ -87,14 +85,13 @@ func DefaultTablePaneKeyMap() *TablePaneKeyMap {
 
 // ------------------------------------------ //
 
-// TableViewKeyMap defines keybindings. It satisfies to the help.KeyMap interface, which
-// is used to render the help menu.
-type TableViewKeyMap struct {
+// ClusterViewKeyMap defines keybindings for the cluster selection view.
+type ClusterViewKeyMap struct {
 	MoveFocus key.Binding
 	Regions   key.Binding
 }
 
-// DialogKeyMaps collects keys that toggle view-specific dailogs
+// DialogKeyMaps collects keys that toggle view-specific dialogs.
 type DialogKeyMaps struct {
 	RegionDialog key.Binding
 }
@@ -106,20 +103,20 @@ func (m *ClusterSelection) DialogKeyMaps() DialogKeyMaps {
 }
 
 // ShortHelp implements the KeyMap interface.
-func (km *TableViewKeyMap) ShortHelp() []key.Binding {
+func (km *ClusterViewKeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{km.MoveFocus, km.Regions}
 }
 
 // FullHelp implements the KeyMap interface.
-func (km *TableViewKeyMap) FullHelp() [][]key.Binding {
+func (km *ClusterViewKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{km.MoveFocus, km.Regions},
 	}
 }
 
-// DefaultTableViewKeyMap returns a default set of keybindings.
-func DefaultTableViewKeyMap() *TableViewKeyMap {
-	return &TableViewKeyMap{
+// DefaultClusterViewKeyMap returns a default set of keybindings.
+func DefaultClusterViewKeyMap() *ClusterViewKeyMap {
+	return &ClusterViewKeyMap{
 		MoveFocus: key.NewBinding(
 			key.WithKeys("tab", "shift+tab"),
 			key.WithHelp("tab/shift+tab", "switch panes"),

@@ -1,6 +1,9 @@
 package appconfig
 
-import "github.com/aws/aws-sdk-go-v2/service/dynamodb"
+import (
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
+)
 
 // Config holds application-level configuration for ecsx.
 type Config struct {
@@ -9,7 +12,13 @@ type Config struct {
 	Cluster string
 	Verbose bool
 
-	Client *dynamodb.Client
+	MaxTables        int
+	URL              *string
+	AvailableRegions []string
+	StarredRegions   []string
+
+	Client    *dynamodb.Client
+	ECSClient *ecs.Client
 	// MFA credentials support
 	MFACredentialCB func() (string, error)
 	MFACredentialC  chan<- CredentialsResponse

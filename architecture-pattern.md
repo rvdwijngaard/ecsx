@@ -139,6 +139,24 @@ its own types (display-ready). Views consume adapter types directly.
 6. **Stateless adapters, stateful views** — Adapters are pure functions (input →
    output). All mutable state lives in views.
 
+## Client Lifecycle & Dependency Injection
+
+Bubble Tea models use value receivers, so reassigning fields inside `Init()` or
+`Update()` does not persist. To handle clients that are created or refreshed
+after construction (e.g. after loading AWS credentials, switching regions):
+
+- Pass a **shared config pointer** (`*appconfig.Config`) to views at
+  construction time.
+- Store SDK clients on the config struct (e.g. `config.ECSClient`).
+- Views read the client from the config pointer **at call time** (inside the
+  command function), not at construction time.
+- When the client needs to change (region switch, credential refresh), update
+  the config pointer and call `Init()` on the view — no need to recreate it.
+
+This avoids the need to reconstruct the entire view tree when external clients
+change, while keeping the dependency flow clean (views depend on config, config
+holds clients that are set by the top-level model).
+
 ## When to Use This Pattern
 
 - Terminal UI apps (Bubble Tea, tview, etc.) that talk to external services
