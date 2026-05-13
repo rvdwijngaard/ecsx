@@ -364,6 +364,8 @@ func (m *taskSelectionPane) handleNavigation(msg tea.Msg) tea.Cmd {
 			return m.openLogsWithEditor()
 		case key.Matches(msg, m.KeyMap.EnvVars):
 			return m.openEnvVars()
+		case key.Matches(msg, m.KeyMap.SSM):
+			return m.openSSM()
 		default:
 			if match, call := m.AddKeyMap.Matches(msg); match {
 				return call
@@ -481,6 +483,44 @@ func (m *taskSelectionPane) openEnvVars() tea.Cmd {
 			Cluster:   cluster,
 			Service:   service,
 			Container: "",
+		}
+	}
+}
+
+// openSSM emits an OpenSSM message for the currently selected task's EC2 instance.
+func (m *taskSelectionPane) openSSM() tea.Cmd {
+	if len(m.tasks) == 0 {
+		return nil
+	}
+
+	idx := m.content.Cursor()
+	if m.filtering.enabled && len(m.filtering.matchedTasks) > 0 {
+		idx = m.filtering.matchedTasks[idx]
+	}
+	if idx >= len(m.tasks) {
+		return nil
+	}
+
+	task := m.tasks[idx]
+	if task.EC2InstanceID == "" {
+		return func() tea.Msg {
+			return messages.ToggleNotificationDialog{
+				Error: fmt.Errorf("no EC2 instance for task %s (launch type: %s)", task.ID, task.LaunchType),
+			}
+		}
+	}
+
+	instanceID := task.EC2InstanceID
+	region := task.Region
+	profile := ""
+	if m.config.Profile != nil {
+		profile = *m.config.Profile
+	}
+	return func() tea.Msg {
+		return messages.OpenSSM{
+			InstanceID: instanceID,
+			Region:     region,
+			Profile:    profile,
 		}
 	}
 }

@@ -410,6 +410,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case messages.CloseEnvVars:
 		m.activeView = tasks_view
+	case messages.OpenSSM:
+		cmd = startSSMSession(msg.InstanceID, msg.Region, msg.Profile)
+	case messages.SSMFinishedMsg:
+		if msg.Err != nil {
+			var exitErr *exec.ExitError
+			if errors.As(msg.Err, &exitErr) && (exitErr.ExitCode() == 130 || exitErr.ExitCode() == -1) {
+				break
+			}
+			cmd = func() tea.Msg {
+				return messages.ToggleNotificationDialog{
+					Error: fmt.Errorf("SSM session: %w", msg.Err),
+				}
+			}
+		}
 	}
 
 	var fwdCmd tea.Cmd

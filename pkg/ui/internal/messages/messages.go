@@ -340,3 +340,15 @@ type ContainersResolvedForEnv struct {
 	Service    string
 	Containers []string
 }
+
+// --- SSM session messages ---
+
+type OpenSSM struct {
+	InstanceID string
+	Region     string
+	Profile    string
+}
+
+type SSMFinishedMsg struct {
+	Err error
+}
