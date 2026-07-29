@@ -403,6 +403,8 @@ func (m *serviceSelectionPane) handleNavigation(msg tea.Msg) tea.Cmd {
 			return m.reload()
 		case key.Matches(msg, m.KeyMap.Copy):
 			return m.copy()
+		case key.Matches(msg, m.KeyMap.Deploy):
+			return m.forceNewDeployment()
 		default:
 			if match, call := m.AddKeyMap.Matches(msg); match {
 				return call
@@ -474,6 +476,30 @@ func (m *serviceSelectionPane) copy() tea.Cmd {
 		}
 	}
 	return notifyCopySuccess
+}
+
+// forceNewDeployment emits a ForceNewDeployment message for the currently selected service.
+func (m *serviceSelectionPane) forceNewDeployment() tea.Cmd {
+	if len(m.services) == 0 {
+		return nil
+	}
+
+	idx := m.content.Cursor()
+	if m.filtering.enabled && len(m.filtering.matchedServices) > 0 {
+		idx = m.filtering.matchedServices[idx]
+	}
+	if idx >= len(m.services) {
+		return nil
+	}
+
+	service := m.services[idx]
+	cluster := m.clusterName
+	return func() tea.Msg {
+		return messages.ForceNewDeployment{
+			Cluster: cluster,
+			Service: service.Name,
+		}
+	}
 }
 
 // MaybePreviewService schedules a debounced preview update for the currently selected service.

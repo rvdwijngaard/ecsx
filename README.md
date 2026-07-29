@@ -250,6 +250,7 @@ stop, exec, ssm) are opt-in and triggered explicitly by the user.
 
 Built on the shoulders of these great tools:
 
+- [dynamite](https://github.com/wolfwfr/dynamite) — the TUI experience is a shameless copy of this awesome DynamoDB tool
 - [ecsq](https://github.com/mightyguava/ecsq) — friendly ECS CLI for querying clusters, services, and tasks
 - [cw](https://github.com/lucagrulla/cw) — CloudWatch Logs tail from the terminal
 - [gossm](https://github.com/gjbae1212/gossm) — interactive SSM session manager

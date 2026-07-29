@@ -7,6 +7,7 @@ import (
 	"log"
 	"os/exec"
 	"slices"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -424,6 +425,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+	case messages.ForceNewDeployment:
+		cmd = m.executeForceNewDeployment(msg.Cluster, msg.Service)
+	case messages.ForceNewDeploymentResult:
+		if msg.Err != nil {
+			cmd = func() tea.Msg {
+				return messages.ToggleNotificationDialog{
+					Error: fmt.Errorf("force new deployment: %w", msg.Err),
+				}
+			}
+		} else {
+			cmd = func() tea.Msg {
+				return messages.ToggleNotificationDialog{
+					Msg:      fmt.Sprintf("Deployment started for %s", msg.Service),
+					Duration: 3 * time.Second,
+				}
+			}
+		}
 	}
 
 	var fwdCmd tea.Cmd
@@ -829,5 +847,18 @@ func (m Model) View() tea.View {
 func (m Model) SignalOpenHelpDialog() tea.Cmd {
 	return func() tea.Msg {
 		return messages.ToggleHelp{}
+	}
+}
+
+// executeForceNewDeployment calls the ECS connector to force a new deployment.
+func (m Model) executeForceNewDeployment(cluster, service string) tea.Cmd {
+	client := m.config.ECSClient
+	return func() tea.Msg {
+		err := ecsconnector.ForceNewDeployment(client, context.Background(), cluster, service)
+		return messages.ForceNewDeploymentResult{
+			Cluster: cluster,
+			Service: service,
+			Err:     err,
+		}
 	}
 }

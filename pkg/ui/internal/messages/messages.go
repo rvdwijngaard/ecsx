@@ -341,6 +341,19 @@ type ContainersResolvedForEnv struct {
 	Containers []string
 }
 
+// --- Force new deployment messages ---
+
+type ForceNewDeployment struct {
+	Cluster string
+	Service string
+}
+
+type ForceNewDeploymentResult struct {
+	Cluster string
+	Service string
+	Err     error
+}
+
 // --- SSM session messages ---
 
 type OpenSSM struct {
