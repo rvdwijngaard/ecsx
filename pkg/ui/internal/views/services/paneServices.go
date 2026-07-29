@@ -403,8 +403,10 @@ func (m *serviceSelectionPane) handleNavigation(msg tea.Msg) tea.Cmd {
 			return m.reload()
 		case key.Matches(msg, m.KeyMap.Copy):
 			return m.copy()
-		case key.Matches(msg, m.KeyMap.Deploy):
-			return m.forceNewDeployment()
+		case key.Matches(msg, m.KeyMap.OpenConsole):
+			return m.openConsole()
+		case key.Matches(msg, m.KeyMap.HostShell):
+			return m.openHostShell()
 		default:
 			if match, call := m.AddKeyMap.Matches(msg); match {
 				return call
@@ -478,8 +480,9 @@ func (m *serviceSelectionPane) copy() tea.Cmd {
 	return notifyCopySuccess
 }
 
-// forceNewDeployment emits a ForceNewDeployment message for the currently selected service.
-func (m *serviceSelectionPane) forceNewDeployment() tea.Cmd {
+// openConsole emits an OpenConsole message with the URL to the AWS ECS
+// console service page for the currently selected service.
+func (m *serviceSelectionPane) openConsole() tea.Cmd {
 	if len(m.services) == 0 {
 		return nil
 	}
@@ -493,11 +496,64 @@ func (m *serviceSelectionPane) forceNewDeployment() tea.Cmd {
 	}
 
 	service := m.services[idx]
-	cluster := m.clusterName
+	region := m.config.Region
+	url := fmt.Sprintf("https://%s.console.aws.amazon.com/ecs/home?region=%s#/clusters/%s/services/%s",
+		region, region, m.clusterName, service.Name)
 	return func() tea.Msg {
-		return messages.ForceNewDeployment{
-			Cluster: cluster,
-			Service: service.Name,
+		return messages.OpenConsole{URL: url}
+	}
+}
+
+// openHostShell resolves the EC2 instances running the selected service's
+// tasks and emits a HostShell message directly (single instance) or a
+// ContainersResolvedForHostShell message so home.go can show the picker.
+func (m *serviceSelectionPane) openHostShell() tea.Cmd {
+	if len(m.services) == 0 {
+		return nil
+	}
+
+	idx := m.content.Cursor()
+	if m.filtering.enabled && len(m.filtering.matchedServices) > 0 {
+		idx = m.filtering.matchedServices[idx]
+	}
+	if idx >= len(m.services) {
+		return nil
+	}
+
+	clusterName := m.clusterName
+	serviceName := m.services[idx].Name
+	client := m.config.ECSClient
+	region := m.config.Region
+	profile := ""
+	if m.config.Profile != nil {
+		profile = *m.config.Profile
+	}
+	ctx, cc := context.WithTimeout(m.ctx, m.stdTO)
+	_ = cc
+
+	return func() tea.Msg {
+		ids, err := ecsadapter.ListServiceInstanceIDs(client, ctx, clusterName, serviceName)
+		if err != nil {
+			return messages.ToggleNotificationDialog{
+				Error: fmt.Errorf("listing service hosts: %w", err),
+			}
+		}
+		switch len(ids) {
+		case 0:
+			return messages.ToggleNotificationDialog{
+				Error: fmt.Errorf("no EC2 hosts run service %s (Fargate-only?)", serviceName),
+			}
+		case 1:
+			return messages.HostShell{
+				EC2InstanceID: ids[0],
+				Region:        region,
+				Profile:       profile,
+			}
+		default:
+			return messages.ContainersResolvedForHostShell{
+				Cluster:   clusterName,
+				Instances: ids,
+			}
 		}
 	}
 }

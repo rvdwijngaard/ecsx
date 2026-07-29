@@ -33,23 +33,25 @@ func DefaultDetailsKeyMap() *DetailsPaneKeyMap {
 
 // ClusterPaneKeyMap defines keybindings for the cluster selection pane.
 type ClusterPaneKeyMap struct {
-	Select key.Binding
-	Search key.Binding
-	Zoom   key.Binding
-	Copy   key.Binding
-	Reload key.Binding
-	Esc    key.Binding
+	Select      key.Binding
+	Search      key.Binding
+	Zoom        key.Binding
+	Copy        key.Binding
+	OpenConsole key.Binding
+	HostShell   key.Binding
+	Reload      key.Binding
+	Esc         key.Binding
 }
 
 // ShortHelp implements the KeyMap interface.
 func (km *ClusterPaneKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{km.Select, km.Search, km.Zoom, km.Reload, km.Esc}
+	return []key.Binding{km.Select, km.Search, km.Zoom, km.OpenConsole, km.HostShell, km.Reload, km.Esc}
 }
 
 // FullHelp implements the KeyMap interface.
 func (km *ClusterPaneKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{km.Select, km.Search, km.Zoom, km.Esc, km.Reload, km.Copy},
+		{km.Select, km.Search, km.Zoom, km.Esc, km.Reload, km.Copy, km.OpenConsole, km.HostShell},
 	}
 }
 
@@ -71,6 +73,14 @@ func DefaultClusterPaneKeyMap() *ClusterPaneKeyMap {
 		Copy: key.NewBinding(
 			key.WithKeys("Y"),
 			key.WithHelp("shift+y", "copy"),
+		),
+		OpenConsole: key.NewBinding(
+			key.WithKeys("o"),
+			key.WithHelp("o", "console"),
+		),
+		HostShell: key.NewBinding(
+			key.WithKeys("x"),
+			key.WithHelp("x", "host shell"),
 		),
 		Reload: key.NewBinding(
 			key.WithKeys("ctrl+r"),

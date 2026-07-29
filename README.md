@@ -6,7 +6,6 @@
   <p align="center">
     <a href="#installation">Installation</a> •
     <a href="#usage">Usage</a> •
-    <a href="#commands">Commands</a> •
     <a href="#keybindings">Keybindings</a>
   </p>
 </p>
@@ -25,7 +24,6 @@ open SSM sessions — without leaving your terminal.
 - 🪵 **humanlog** — pipe logs through [`hl`](https://github.com/humanlogio/humanlog) for structured log formatting
 - 📝 **Editor** — open buffered logs in `$EDITOR` for search and analysis
 - ⚖️ **Scale** — update desired count on the fly
-- 🔄 **Deploy** — force new deployment to restart services
 - 🛑 **Stop** — stop individual tasks
 - 🔑 **Env vars** — inspect container environment, copy to clipboard
 - 🐚 **Exec** — shell into running containers via ECS ExecuteCommand
@@ -37,6 +35,14 @@ open SSM sessions — without leaving your terminal.
 - AWS credentials configured (via CLI, env vars, or IAM role)
 - [session-manager-plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)
   — required for `exec` and `ssm` commands
+
+For `exec` (the `x` keybinding in the tasks view) the target ECS service must have
+`enableExecuteCommand: true` set on its service definition **before** tasks are
+launched — the flag does not apply to tasks already running. If exec fails with
+`InvalidParameterException: ... execute command was not enabled when the task
+was run`, set the flag and roll new tasks. The container also needs the SSM
+agent reachable (Fargate has this by default; EC2 launch type requires the
+ecs-agent on the instance to be configured for SSM).
 
 ## Installation
 
@@ -62,85 +68,6 @@ ecsx -c my-cluster            # jump straight to a cluster
 ecsx -p prod -r eu-west-1     # specify AWS profile and region
 ```
 
-## Commands
-
-### `ecsx logs` — tail CloudWatch logs
-
-```sh
-ecsx logs -c my-cluster -s my-service
-ecsx logs -c my-cluster -s my-service -f "ERROR"         # filter pattern
-ecsx logs -c my-cluster -s my-service -G "ERR|WARN"      # client-side regex grep
-ecsx logs -c my-cluster -s my-service -b 2h              # last 2 hours
-ecsx logs -c my-cluster -s my-service --no-follow        # dump and exit
-```
-
-`-f` is a server-side [CloudWatch filter pattern](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/FilterAndPatternSyntax.html)
-— it reduces the data sent from AWS. `-G` is a client-side regex applied after
-receiving the logs, useful for patterns CloudWatch filters can't express:
-
-```sh
-# Only show ERROR and WARN lines
-ecsx logs -c my-cluster -s my-service -G "ERROR|WARN"
-
-# Match slow requests (4+ digit durations)
-ecsx logs -c my-cluster -s my-service -G "duration=[0-9]{4,}ms"
-
-# Filter by specific HTTP status codes (5xx errors)
-ecsx logs -c my-cluster -s my-service -G "HTTP/[0-9.]+ 5[0-9]{2}"
-
-# Match a specific user or request ID
-ecsx logs -c my-cluster -s my-service -G "user=(alice|bob)"
-
-# Case-insensitive match
-ecsx logs -c my-cluster -s my-service -G "(?i)timeout|deadline"
-
-# Combine server-side filter with client-side grep
-ecsx logs -c my-cluster -s my-service -f "ERROR" -G "database|connection"
-```
-
-### `ecsx exec` — shell into a container
-
-```sh
-ecsx exec -c my-cluster -s my-service                    # /bin/sh into first task
-ecsx exec -c my-cluster -s my-service --cmd "ls -la"     # run a command
-ecsx exec -c my-cluster -t <task-id> -u my-container     # target specific task + container
-```
-
-> Requires `session-manager-plugin` and
-> [`enableExecuteCommand`](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-exec.html)
-> enabled on the ECS service.
-
-### `ecsx ssm` — connect to EC2 instances
-
-```sh
-ecsx ssm -c my-cluster -s my-service     # resolve instance from service tasks
-ecsx ssm -c my-cluster -i i-0abc123      # connect directly
-```
-
-### `ecsx task` — describe a task
-
-```sh
-ecsx task -c my-cluster -s my-service                    # describe first task in service
-ecsx task -c my-cluster -s my-service -t <task-id>       # describe specific task
-```
-
-### `ecsx container-env` — list container environment variables
-
-```sh
-ecsx container-env -c my-cluster -s my-service                          # table format
-ecsx container-env -c my-cluster -s my-service --format export          # export KEY="value"
-ecsx container-env -c my-cluster -s my-service --format docker          # -e KEY=value
-ecsx container-env -c my-cluster -s my-service --container my-container # specific container
-```
-
-### `ecsx completion` — shell completions
-
-```sh
-ecsx completion bash | sudo tee /etc/bash_completion.d/ecsx
-ecsx completion zsh > ~/.zfunc/_ecsx
-ecsx completion fish > ~/.config/fish/completions/ecsx.fish
-```
-
 ## Keybindings
 
 | Key     | Action                          |
@@ -154,7 +81,8 @@ ecsx completion fish > ~/.config/fish/completions/ecsx.fish
 | `e`     | Open logs in `$EDITOR` / toggle env vars |
 | `y`     | Copy env vars to clipboard      |
 | `s`     | Scale service                   |
-| `x`     | Deploy / stop task / SSM session |
+| `x`     | Exec into container / open host shell |
+| `o`     | Open in AWS web console               |
 | `r`     | Refresh                         |
 | `+` `-` | Toggle zoom                     |
 | `?`     | Help                            |

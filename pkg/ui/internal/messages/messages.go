@@ -169,19 +169,6 @@ type ContainersResolvedForEnv struct {
 	Containers []string
 }
 
-// --- Force new deployment messages ---
-
-type ForceNewDeployment struct {
-	Cluster string
-	Service string
-}
-
-type ForceNewDeploymentResult struct {
-	Cluster string
-	Service string
-	Err     error
-}
-
 // --- SSM session messages ---
 
 type OpenSSM struct {
@@ -192,4 +179,60 @@ type OpenSSM struct {
 
 type SSMFinishedMsg struct {
 	Err error
+}
+
+// HostShell requests an interactive SSM session into an EC2 container
+// instance, identified by its EC2 instance ID.
+type HostShell struct {
+	EC2InstanceID string
+	Region        string
+	Profile       string
+}
+
+// ContainersResolvedForHostShell is emitted after resolving the EC2 instances
+// in scope for a host-shell session so the user can pick one.
+type ContainersResolvedForHostShell struct {
+	Cluster   string
+	Instances []string
+}
+
+// OpenConsole asks the model to open the given URL in the user's default
+// browser.
+type OpenConsole struct {
+	URL string
+}
+
+// --- ECS exec session messages ---
+
+// ExecIntoContainer requests an interactive shell session into a container.
+// When Container is empty, the caller must resolve containers first.
+type ExecIntoContainer struct {
+	Cluster   string
+	Service   string
+	Task      string // task ARN
+	Container string // container name
+	Region    string
+	Profile   string
+}
+
+type ExecFinishedMsg struct {
+	Err error
+}
+
+// ExecSessionReady carries the data needed to launch session-manager-plugin
+// after the ExecuteCommand API call has succeeded.
+type ExecSessionReady struct {
+	SessionJSON string
+	Region      string
+	Profile     string
+	Target      string // ECS task ARN — required by session-manager-plugin
+}
+
+// ContainersResolvedForExec is emitted after resolving the containers of a
+// task so the user can pick one before exec.
+type ContainersResolvedForExec struct {
+	Cluster    string
+	Service    string
+	Task       string
+	Containers []string
 }

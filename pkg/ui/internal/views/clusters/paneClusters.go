@@ -316,6 +316,10 @@ func (m *clusterSelectionPane) handleNavigation(msg tea.Msg) tea.Cmd {
 			return m.Init()
 		case key.Matches(msg, m.KeyMap.Copy):
 			return m.copy()
+		case key.Matches(msg, m.KeyMap.OpenConsole):
+			return m.openConsole()
+		case key.Matches(msg, m.KeyMap.HostShell):
+			return m.openHostShell()
 		default:
 			if match, call := m.AddKeyMap.Matches(msg); match {
 				return call
@@ -501,4 +505,81 @@ func (m *clusterSelectionPane) noContentMessage() string {
 
 func notifyCopySuccess() tea.Msg {
 	return messages.ToggleNotificationDialog{Msg: "Copied!", Duration: 1 * time.Second}
+}
+
+// openConsole emits an OpenConsole message with the URL to the AWS ECS
+// console cluster page for the currently selected cluster.
+func (m *clusterSelectionPane) openConsole() tea.Cmd {
+	if len(m.clusters) == 0 {
+		return nil
+	}
+
+	idx := m.content.Cursor()
+	if m.filtering.enabled && len(m.filtering.matchedClusters) > 0 {
+		idx = m.filtering.matchedClusters[idx]
+	}
+	if idx >= len(m.clusters) {
+		return nil
+	}
+
+	cluster := m.clusters[idx]
+	region := m.config.Region
+	url := fmt.Sprintf("https://%s.console.aws.amazon.com/ecs/home?region=%s#/clusters/%s",
+		region, region, cluster.Name)
+	return func() tea.Msg {
+		return messages.OpenConsole{URL: url}
+	}
+}
+
+// openHostShell resolves the cluster's EC2 container instances and emits a
+// HostShell message directly (single instance) or a
+// ContainersResolvedForHostShell message so home.go can show the picker.
+func (m *clusterSelectionPane) openHostShell() tea.Cmd {
+	if len(m.clusters) == 0 {
+		return nil
+	}
+
+	idx := m.content.Cursor()
+	if m.filtering.enabled && len(m.filtering.matchedClusters) > 0 {
+		idx = m.filtering.matchedClusters[idx]
+	}
+	if idx >= len(m.clusters) {
+		return nil
+	}
+
+	clusterName := m.clusters[idx].Name
+	client := m.config.ECSClient
+	region := m.config.Region
+	profile := ""
+	if m.config.Profile != nil {
+		profile = *m.config.Profile
+	}
+	ctx, cc := context.WithTimeout(m.ctx, m.stdTO)
+	_ = cc
+
+	return func() tea.Msg {
+		ids, err := ecsadapter.ListClusterInstanceIDs(client, ctx, clusterName)
+		if err != nil {
+			return messages.ToggleNotificationDialog{
+				Error: fmt.Errorf("listing cluster instances: %w", err),
+			}
+		}
+		switch len(ids) {
+		case 0:
+			return messages.ToggleNotificationDialog{
+				Error: fmt.Errorf("no hosts in cluster %s", clusterName),
+			}
+		case 1:
+			return messages.HostShell{
+				EC2InstanceID: ids[0],
+				Region:        region,
+				Profile:       profile,
+			}
+		default:
+			return messages.ContainersResolvedForHostShell{
+				Cluster:   clusterName,
+				Instances: ids,
+			}
+		}
+	}
 }

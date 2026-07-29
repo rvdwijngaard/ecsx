@@ -91,19 +91,6 @@ func UpdateServiceDesiredCount(client serviceClient, ctx context.Context, cluste
 	return nil
 }
 
-// ForceNewDeployment triggers a new deployment for a service.
-func ForceNewDeployment(client serviceClient, ctx context.Context, cluster, service string) error {
-	_, err := client.UpdateService(ctx, &ecs.UpdateServiceInput{
-		Cluster:            &cluster,
-		Service:            &service,
-		ForceNewDeployment: true,
-	})
-	if err != nil {
-		return fmt.Errorf("force new deployment: %w", err)
-	}
-	return nil
-}
-
 func listAllServiceARNs(client serviceClient, ctx context.Context, cluster string) ([]string, error) {
 	var arns []string
 	p := ecs.NewListServicesPaginator(client, &ecs.ListServicesInput{Cluster: &cluster})

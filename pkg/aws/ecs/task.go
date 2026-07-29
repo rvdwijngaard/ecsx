@@ -94,7 +94,13 @@ func DescribeTaskDefinition(client taskClient, ctx context.Context, taskDef stri
 	return defs, nil
 }
 
-// ExecuteCommand calls the ECS ExecuteCommand API and returns the session details.
+// ExecuteCommand calls the ECS ExecuteCommand API and returns the session
+// details as JSON suitable for session-manager-plugin.
+//
+// We construct the JSON explicitly to guarantee non-null values for every
+// required field. Marshalling the SDK's *ecstypes.Session directly would
+// produce `"Field":null` for any nil pointer, which session-manager-plugin
+// fails to handle (it asserts fields as concrete types and panics on nil).
 func ExecuteCommand(client taskClient, ctx context.Context, cluster, task, container, command string) (*apitypes.ExecuteCommandOutput, error) {
 	interactive := true
 	out, err := client.ExecuteCommand(ctx, &ecs.ExecuteCommandInput{
@@ -107,12 +113,30 @@ func ExecuteCommand(client taskClient, ctx context.Context, cluster, task, conta
 	if err != nil {
 		return nil, fmt.Errorf("execute command: %w", err)
 	}
-	sess, err := json.Marshal(out.Session)
+	if out.Session == nil {
+		return nil, fmt.Errorf("execute command: empty session response")
+	}
+
+	sessionJSON, err := json.Marshal(struct {
+		SessionId  string `json:"SessionId"`
+		TokenValue string `json:"TokenValue"`
+		StreamUrl  string `json:"StreamUrl"`
+	}{
+		SessionId:  aws.ToString(out.Session.SessionId),
+		TokenValue: aws.ToString(out.Session.TokenValue),
+		StreamUrl:  aws.ToString(out.Session.StreamUrl),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("marshalling session: %w", err)
 	}
+	if sessionJSON == nil || len(sessionJSON) == 0 ||
+		aws.ToString(out.Session.SessionId) == "" ||
+		aws.ToString(out.Session.TokenValue) == "" ||
+		aws.ToString(out.Session.StreamUrl) == "" {
+		return nil, fmt.Errorf("execute command: incomplete session response")
+	}
 	return &apitypes.ExecuteCommandOutput{
-		Session:   sess,
+		Session:   sessionJSON,
 		TaskARN:   task,
 		Container: container,
 		Cluster:   cluster,

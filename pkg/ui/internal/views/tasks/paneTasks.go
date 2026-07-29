@@ -366,6 +366,10 @@ func (m *taskSelectionPane) handleNavigation(msg tea.Msg) tea.Cmd {
 			return m.openEnvVars()
 		case key.Matches(msg, m.KeyMap.SSM):
 			return m.openSSM()
+		case key.Matches(msg, m.KeyMap.Exec):
+			return m.execIntoTask()
+		case key.Matches(msg, m.KeyMap.OpenConsole):
+			return m.openConsole()
 		default:
 			if match, call := m.AddKeyMap.Matches(msg); match {
 				return call
@@ -522,6 +526,94 @@ func (m *taskSelectionPane) openSSM() tea.Cmd {
 			Region:     region,
 			Profile:    profile,
 		}
+	}
+}
+
+// execIntoTask emits either an ExecIntoContainer message directly (single
+// container) or a ContainersResolvedForExec message so home.go can show the
+// picker (multi container).
+func (m *taskSelectionPane) execIntoTask() tea.Cmd {
+	if len(m.tasks) == 0 {
+		return nil
+	}
+
+	idx := m.content.Cursor()
+	if m.filtering.enabled && len(m.filtering.matchedTasks) > 0 {
+		idx = m.filtering.matchedTasks[idx]
+	}
+	if idx >= len(m.tasks) {
+		return nil
+	}
+
+	task := m.tasks[idx]
+
+	cluster := m.clusterName
+	service := m.serviceName
+	region := task.Region
+	profile := ""
+	if m.config.Profile != nil {
+		profile = *m.config.Profile
+	}
+
+	containers := make([]string, 0, len(task.Containers))
+	for _, c := range task.Containers {
+		containers = append(containers, c.Name)
+	}
+
+	switch len(containers) {
+	case 0:
+		return func() tea.Msg {
+			return messages.ToggleNotificationDialog{
+				Error: fmt.Errorf("no containers found for task %s", task.ID),
+			}
+		}
+	case 1:
+		return func() tea.Msg {
+			return messages.ExecIntoContainer{
+				Cluster:   cluster,
+				Service:   service,
+				Task:      task.ARN,
+				Container: containers[0],
+				Region:    region,
+				Profile:   profile,
+			}
+		}
+	default:
+		return func() tea.Msg {
+			return messages.ContainersResolvedForExec{
+				Cluster:    cluster,
+				Service:    service,
+				Task:       task.ARN,
+				Containers: containers,
+			}
+		}
+	}
+}
+
+// openConsole emits an OpenConsole message with the URL to the AWS ECS
+// console task page for the currently selected task.
+func (m *taskSelectionPane) openConsole() tea.Cmd {
+	if len(m.tasks) == 0 {
+		return nil
+	}
+
+	idx := m.content.Cursor()
+	if m.filtering.enabled && len(m.filtering.matchedTasks) > 0 {
+		idx = m.filtering.matchedTasks[idx]
+	}
+	if idx >= len(m.tasks) {
+		return nil
+	}
+
+	task := m.tasks[idx]
+	region := task.Region
+	if region == "" {
+		region = m.config.Region
+	}
+	url := fmt.Sprintf("https://%s.console.aws.amazon.com/ecs/home?region=%s#/clusters/%s/tasks/%s",
+		region, region, m.clusterName, task.ID)
+	return func() tea.Msg {
+		return messages.OpenConsole{URL: url}
 	}
 }
 

@@ -41,18 +41,20 @@ type TaskPaneKeyMap struct {
 	LogsCommand key.Binding
 	EnvVars     key.Binding
 	SSM         key.Binding
+	Exec        key.Binding
+	OpenConsole key.Binding
 	Esc         key.Binding
 }
 
 // ShortHelp implements the KeyMap interface.
 func (km *TaskPaneKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{km.Search, km.Zoom, km.Logs, km.LogsCommand, km.EnvVars, km.SSM, km.Reload, km.Esc}
+	return []key.Binding{km.Search, km.Zoom, km.Logs, km.LogsCommand, km.EnvVars, km.SSM, km.Exec, km.OpenConsole, km.Reload, km.Esc}
 }
 
 // FullHelp implements the KeyMap interface.
 func (km *TaskPaneKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{km.Search, km.Zoom, km.Esc, km.Reload, km.Copy, km.Logs, km.LogsCommand, km.EnvVars, km.SSM},
+		{km.Search, km.Zoom, km.Esc, km.Reload, km.Copy, km.Logs, km.LogsCommand, km.EnvVars, km.SSM, km.Exec, km.OpenConsole},
 	}
 }
 
@@ -90,6 +92,14 @@ func DefaultTaskPaneKeyMap() *TaskPaneKeyMap {
 		SSM: key.NewBinding(
 			key.WithKeys("s"),
 			key.WithHelp("s", "ssm session"),
+		),
+		Exec: key.NewBinding(
+			key.WithKeys("x"),
+			key.WithHelp("x", "exec"),
+		),
+		OpenConsole: key.NewBinding(
+			key.WithKeys("o"),
+			key.WithHelp("o", "console"),
 		),
 		Esc: key.NewBinding(
 			key.WithKeys("esc"),

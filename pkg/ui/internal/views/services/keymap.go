@@ -33,24 +33,25 @@ func DefaultDetailsKeyMap() *DetailsPaneKeyMap {
 
 // ServicePaneKeyMap defines keybindings for the service selection pane.
 type ServicePaneKeyMap struct {
-	Select key.Binding
-	Search key.Binding
-	Zoom   key.Binding
-	Copy   key.Binding
-	Deploy key.Binding
-	Reload key.Binding
-	Esc    key.Binding
+	Select      key.Binding
+	Search      key.Binding
+	Zoom        key.Binding
+	Copy        key.Binding
+	OpenConsole key.Binding
+	HostShell   key.Binding
+	Reload      key.Binding
+	Esc         key.Binding
 }
 
 // ShortHelp implements the KeyMap interface.
 func (km *ServicePaneKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{km.Select, km.Search, km.Zoom, km.Deploy, km.Reload, km.Esc}
+	return []key.Binding{km.Select, km.Search, km.Zoom, km.OpenConsole, km.HostShell, km.Reload, km.Esc}
 }
 
 // FullHelp implements the KeyMap interface.
 func (km *ServicePaneKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{km.Select, km.Search, km.Zoom, km.Esc, km.Reload, km.Copy, km.Deploy},
+		{km.Select, km.Search, km.Zoom, km.Esc, km.Reload, km.Copy, km.OpenConsole, km.HostShell},
 	}
 }
 
@@ -73,9 +74,13 @@ func DefaultServicePaneKeyMap() *ServicePaneKeyMap {
 			key.WithKeys("Y"),
 			key.WithHelp("shift+y", "copy"),
 		),
-		Deploy: key.NewBinding(
+		OpenConsole: key.NewBinding(
+			key.WithKeys("o"),
+			key.WithHelp("o", "console"),
+		),
+		HostShell: key.NewBinding(
 			key.WithKeys("x"),
-			key.WithHelp("x", "deploy"),
+			key.WithHelp("x", "host shell"),
 		),
 		Reload: key.NewBinding(
 			key.WithKeys("ctrl+r"),

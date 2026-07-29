@@ -7,7 +7,6 @@ import (
 	"log"
 	"os/exec"
 	"slices"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -366,6 +365,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.activeView = tasks_view
 	case messages.OpenSSM:
 		cmd = startSSMSession(msg.InstanceID, msg.Region, msg.Profile)
+	case messages.HostShell:
+		cmd = startSSMSession(msg.EC2InstanceID, msg.Region, msg.Profile)
+	case messages.ContainersResolvedForHostShell:
+		if len(msg.Instances) == 1 {
+			cmd = func() tea.Msg {
+				return messages.HostShell{
+					EC2InstanceID: msg.Instances[0],
+					Region:        m.config.Region,
+					Profile:       profileString(m.config.Profile),
+				}
+			}
+		} else if len(msg.Instances) > 1 {
+			m.dialogs.containerPicker.SetContainers(msg.Cluster, "", msg.Instances, dialogs.PickerPurposeHostShell)
+			m.dialogs.containerPicker.SetHostShellContext(m.config.Region, profileString(m.config.Profile))
+			m.dialogs.open = true
+			m.dialogs.active = container_picker_dialog
+		} else {
+			cmd = func() tea.Msg {
+				return messages.ToggleNotificationDialog{
+					Error: fmt.Errorf("no EC2 hosts in scope"),
+				}
+			}
+		}
 	case messages.SSMFinishedMsg:
 		if msg.Err != nil {
 			var exitErr *exec.ExitError
@@ -378,23 +400,48 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-	case messages.ForceNewDeployment:
-		cmd = m.executeForceNewDeployment(msg.Cluster, msg.Service)
-	case messages.ForceNewDeploymentResult:
+	case messages.ExecIntoContainer:
+		cmd = m.startExecSession(msg)
+	case messages.ExecFinishedMsg:
 		if msg.Err != nil {
-			cmd = func() tea.Msg {
-				return messages.ToggleNotificationDialog{
-					Error: fmt.Errorf("force new deployment: %w", msg.Err),
-				}
+			var exitErr *exec.ExitError
+			if errors.As(msg.Err, &exitErr) && (exitErr.ExitCode() == 130 || exitErr.ExitCode() == -1) {
+				break
 			}
-		} else {
 			cmd = func() tea.Msg {
 				return messages.ToggleNotificationDialog{
-					Msg:      fmt.Sprintf("Deployment started for %s", msg.Service),
-					Duration: 3 * time.Second,
+					Error: fmt.Errorf("exec session: %w", msg.Err),
 				}
 			}
 		}
+	case messages.ExecSessionReady:
+		cmd = startExecSession(msg.SessionJSON, msg.Region, msg.Profile, msg.Target)
+	case messages.ContainersResolvedForExec:
+		if len(msg.Containers) == 1 {
+			cmd = func() tea.Msg {
+				return messages.ExecIntoContainer{
+					Cluster:   msg.Cluster,
+					Service:   msg.Service,
+					Task:      msg.Task,
+					Container: msg.Containers[0],
+					Region:    m.config.Region,
+					Profile:   profileString(m.config.Profile),
+				}
+			}
+		} else if len(msg.Containers) > 1 {
+			m.dialogs.containerPicker.SetContainers(msg.Cluster, msg.Service, msg.Containers, dialogs.PickerPurposeExec)
+			m.dialogs.containerPicker.SetExecContext(msg.Task, m.config.Region, profileString(m.config.Profile))
+			m.dialogs.open = true
+			m.dialogs.active = container_picker_dialog
+		} else {
+			cmd = func() tea.Msg {
+				return messages.ToggleNotificationDialog{
+					Error: fmt.Errorf("no containers found for task"),
+				}
+			}
+		}
+	case messages.OpenConsole:
+		cmd = openURL(msg.URL)
 	}
 
 	var fwdCmd tea.Cmd
@@ -700,15 +747,41 @@ func (m Model) SignalOpenHelpDialog() tea.Cmd {
 	}
 }
 
-// executeForceNewDeployment calls the ECS connector to force a new deployment.
-func (m Model) executeForceNewDeployment(cluster, service string) tea.Cmd {
+// startExecSession calls the ECS ExecuteCommand connector and, on success,
+// suspends the TUI to launch session-manager-plugin. Errors are surfaced as a
+// notification.
+func (m Model) startExecSession(msg messages.ExecIntoContainer) tea.Cmd {
 	client := m.config.ECSClient
+	region := msg.Region
+	if region == "" {
+		region = m.config.Region
+	}
+	profile := msg.Profile
 	return func() tea.Msg {
-		err := ecsconnector.ForceNewDeployment(client, context.Background(), cluster, service)
-		return messages.ForceNewDeploymentResult{
-			Cluster: cluster,
-			Service: service,
-			Err:     err,
+		if client == nil {
+			return messages.ToggleNotificationDialog{
+				Error: fmt.Errorf("ECS client not available"),
+			}
+		}
+		out, err := ecsconnector.ExecuteCommand(client, context.Background(), msg.Cluster, msg.Task, msg.Container, "/bin/sh")
+		if err != nil {
+			return messages.ToggleNotificationDialog{
+				Error: fmt.Errorf("exec: %w", err),
+			}
+		}
+		return messages.ExecSessionReady{
+			SessionJSON: string(out.Session),
+			Region:      region,
+			Profile:     profile,
+			Target:      msg.Task,
 		}
 	}
+}
+
+// profileString safely dereferences a possibly-nil profile pointer.
+func profileString(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }

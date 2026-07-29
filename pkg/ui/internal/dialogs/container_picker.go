@@ -29,6 +29,8 @@ type ContainerPickerPurpose int
 const (
 	PickerPurposeLogs ContainerPickerPurpose = iota
 	PickerPurposeEnvVars
+	PickerPurposeExec
+	PickerPurposeHostShell
 )
 
 // ContainerPicker enables the user to select a container for log viewing.
@@ -47,6 +49,11 @@ type ContainerPicker struct {
 	cluster string
 	service string
 	purpose ContainerPickerPurpose
+
+	// exec-specific context (only set when purpose == PickerPurposeExec)
+	task    string
+	region  string
+	profile string
 
 	// available containers
 	containers []string
@@ -141,6 +148,9 @@ func (m *ContainerPicker) SetContainers(cluster, service string, containers []st
 	m.service = service
 	m.containers = containers
 	m.purpose = purpose
+	m.task = ""
+	m.region = ""
+	m.profile = ""
 
 	items := make([]list.Item, len(containers))
 	for i, c := range containers {
@@ -149,6 +159,22 @@ func (m *ContainerPicker) SetContainers(cluster, service string, containers []st
 	m.content.SetItems(items)
 	m.content.Select(0)
 	m.updateSize()
+}
+
+// SetExecContext provides task-level context required by the picker when
+// purpose is PickerPurposeExec. Call after SetContainers.
+func (m *ContainerPicker) SetExecContext(task, region, profile string) {
+	m.task = task
+	m.region = region
+	m.profile = profile
+}
+
+// SetHostShellContext provides region + profile required by the picker when
+// purpose is PickerPurposeHostShell. Call after SetContainers.
+func (m *ContainerPicker) SetHostShellContext(region, profile string) {
+	m.task = ""
+	m.region = region
+	m.profile = profile
 }
 
 func (m *ContainerPicker) Init() tea.Cmd {
@@ -195,6 +221,21 @@ func (m *ContainerPicker) selectContainer() tea.Cmd {
 					Cluster:   cluster,
 					Service:   service,
 					Container: selected,
+				}
+			case PickerPurposeExec:
+				return messages.ExecIntoContainer{
+					Cluster:   cluster,
+					Service:   service,
+					Task:      m.task,
+					Container: selected,
+					Region:    m.region,
+					Profile:   m.profile,
+				}
+			case PickerPurposeHostShell:
+				return messages.HostShell{
+					EC2InstanceID: selected,
+					Region:        m.region,
+					Profile:       m.profile,
 				}
 			default:
 				return messages.OpenLogs{
