@@ -5,10 +5,10 @@ import (
 
 	dynamodbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
-	cwtypes "github.com/ron/ecsx/pkg/ui/internal/adapters/cloudwatch/types"
-	cwltypes "github.com/ron/ecsx/pkg/ui/internal/adapters/cloudwatchlogs/types"
-	apitypes "github.com/ron/ecsx/pkg/ui/internal/adapters/dynamodb/types"
-	apitypes2 "github.com/ron/ecsx/pkg/ui/internal/adapters/ecs/types"
+	cwtypes "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/cloudwatch/types"
+	cwltypes "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/cloudwatchlogs/types"
+	apitypes "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/dynamodb/types"
+	apitypes2 "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/ecs/types"
 )
 
 type View int

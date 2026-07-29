@@ -8,10 +8,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	appconfig "github.com/ron/ecsx/pkg"
-	"github.com/ron/ecsx/pkg/ui/internal/messages"
-	"github.com/ron/ecsx/pkg/ui/internal/styles"
-	"github.com/ron/ecsx/pkg/ui/internal/views/util/keymaps"
+	appconfig "github.com/rvdwijngaard/ecsx/pkg"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/messages"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/styles"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/views/util/keymaps"
 )
 
 type paneID int

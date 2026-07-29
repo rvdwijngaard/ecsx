@@ -43,13 +43,13 @@ open SSM sessions — without leaving your terminal.
 **Go:**
 
 ```sh
-go install github.com/ron/ecsx/cmd/ecsx@latest
+go install github.com/rvdwijngaard/ecsx/cmd/ecsx@latest
 ```
 
 **From source:**
 
 ```sh
-git clone https://github.com/ron/ecsx.git
+git clone https://github.com/rvdwijngaard/ecsx.git
 cd ecsx
 make install
 ```

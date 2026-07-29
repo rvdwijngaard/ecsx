@@ -9,10 +9,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	appconfig "github.com/ron/ecsx/pkg"
-	"github.com/ron/ecsx/pkg/ui/internal/messages"
-	"github.com/ron/ecsx/pkg/ui/internal/styles"
-	commonstyles "github.com/ron/ecsx/pkg/ui/internal/styles"
+	appconfig "github.com/rvdwijngaard/ecsx/pkg"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/messages"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/styles"
+	commonstyles "github.com/rvdwijngaard/ecsx/pkg/ui/internal/styles"
 )
 
 // the MFA dialog requests an MFA token for AWS credits

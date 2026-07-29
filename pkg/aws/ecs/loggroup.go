@@ -8,7 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 
-	cwltypes "github.com/ron/ecsx/pkg/aws/cloudwatchlogs/types"
+	cwltypes "github.com/rvdwijngaard/ecsx/pkg/aws/cloudwatchlogs/types"
 )
 
 type logGroupClient interface {

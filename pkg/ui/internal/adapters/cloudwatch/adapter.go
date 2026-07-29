@@ -10,7 +10,7 @@ import (
 	cw "github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 
-	adaptypes "github.com/ron/ecsx/pkg/ui/internal/adapters/cloudwatch/types"
+	adaptypes "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/cloudwatch/types"
 )
 
 // GetServiceMetrics retrieves CPU and memory utilization for an ECS service over the last hour.

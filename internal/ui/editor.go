@@ -8,7 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	ecsaws "github.com/ron/ecsx/internal/aws"
+	ecsaws "github.com/rvdwijngaard/ecsx/internal/aws"
 )
 
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)

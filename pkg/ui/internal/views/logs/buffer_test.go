@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	adaptertypes "github.com/ron/ecsx/pkg/ui/internal/adapters/cloudwatchlogs/types"
+	adaptertypes "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/cloudwatchlogs/types"
 )
 
 func makeLine(msg string) adaptertypes.FormattedLogLine {

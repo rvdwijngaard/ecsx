@@ -8,7 +8,7 @@ import (
 	osexec "os/exec"
 	"strings"
 
-	ecsaws "github.com/ron/ecsx/internal/aws"
+	ecsaws "github.com/rvdwijngaard/ecsx/internal/aws"
 )
 
 // Connect runs ECS ExecuteCommand and hands off to session-manager-plugin.

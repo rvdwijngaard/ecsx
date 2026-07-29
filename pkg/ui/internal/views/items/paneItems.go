@@ -18,15 +18,15 @@ import (
 	dynamotypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/charmbracelet/x/ansi"
 
-	appconfig "github.com/ron/ecsx/pkg"
-	"github.com/ron/ecsx/pkg/ui/internal/adapters/dynamodb"
-	"github.com/ron/ecsx/pkg/ui/internal/adapters/dynamodb/types"
-	"github.com/ron/ecsx/pkg/ui/internal/components/search"
-	"github.com/ron/ecsx/pkg/ui/internal/components/table"
-	"github.com/ron/ecsx/pkg/ui/internal/messages"
-	commonstyles "github.com/ron/ecsx/pkg/ui/internal/styles"
-	"github.com/ron/ecsx/pkg/ui/internal/views/util/keymaps"
-	u "github.com/ron/ecsx/pkg/util"
+	appconfig "github.com/rvdwijngaard/ecsx/pkg"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/dynamodb"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/dynamodb/types"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/components/search"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/components/table"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/messages"
+	commonstyles "github.com/rvdwijngaard/ecsx/pkg/ui/internal/styles"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/views/util/keymaps"
+	u "github.com/rvdwijngaard/ecsx/pkg/util"
 )
 
 var tableInfoBox = lipgloss.NewStyle().

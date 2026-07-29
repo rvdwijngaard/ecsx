@@ -1,4 +1,4 @@
-module github.com/ron/ecsx
+module github.com/rvdwijngaard/ecsx
 
 go 1.26.2
 

@@ -8,7 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/google/uuid"
 
-	commonstyles "github.com/ron/ecsx/pkg/ui/internal/styles"
+	commonstyles "github.com/rvdwijngaard/ecsx/pkg/ui/internal/styles"
 )
 
 var (

@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/ron/ecsx/pkg/ui/internal/styles"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/styles"
 )
 
 func spf(format string, a ...any) string {

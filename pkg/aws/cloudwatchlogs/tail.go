@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	logstypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 
-	apitypes "github.com/ron/ecsx/pkg/aws/cloudwatchlogs/types"
+	apitypes "github.com/rvdwijngaard/ecsx/pkg/aws/cloudwatchlogs/types"
 )
 
 type tailClient interface {

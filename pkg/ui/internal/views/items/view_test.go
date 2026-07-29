@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/ron/ecsx/pkg/ui/internal/adapters/dynamodb/types"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/dynamodb/types"
 )
 
 func TestCompileCompleteKeys(t *testing.T) {

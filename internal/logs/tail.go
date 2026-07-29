@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/term"
 
-	ecsaws "github.com/ron/ecsx/internal/aws"
+	ecsaws "github.com/rvdwijngaard/ecsx/internal/aws"
 )
 
 // Options configures the Tail behavior.

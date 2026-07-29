@@ -9,7 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/textinput"
 
-	ecsaws "github.com/ron/ecsx/internal/aws"
+	ecsaws "github.com/rvdwijngaard/ecsx/internal/aws"
 )
 
 func (m Model) handleEnter() (tea.Model, tea.Cmd) {

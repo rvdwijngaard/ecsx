@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	ecstypes "github.com/ron/ecsx/pkg/aws/ecs/types"
+	ecstypes "github.com/rvdwijngaard/ecsx/pkg/aws/ecs/types"
 )
 
 func TestFormatTable(t *testing.T) {

@@ -15,11 +15,11 @@ import (
 
 	"github.com/atotto/clipboard"
 
-	appconfig "github.com/ron/ecsx/pkg"
-	ecstypes "github.com/ron/ecsx/pkg/aws/ecs/types"
-	ecsadapter "github.com/ron/ecsx/pkg/ui/internal/adapters/envvars"
-	"github.com/ron/ecsx/pkg/ui/internal/messages"
-	"github.com/ron/ecsx/pkg/ui/internal/styles"
+	appconfig "github.com/rvdwijngaard/ecsx/pkg"
+	ecstypes "github.com/rvdwijngaard/ecsx/pkg/aws/ecs/types"
+	ecsadapter "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/envvars"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/messages"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/styles"
 )
 
 type envVarsStyles struct {

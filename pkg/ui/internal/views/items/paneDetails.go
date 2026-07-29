@@ -11,9 +11,9 @@ import (
 
 	"github.com/atotto/clipboard"
 
-	appconfig "github.com/ron/ecsx/pkg"
-	"github.com/ron/ecsx/pkg/ui/internal/messages"
-	"github.com/ron/ecsx/pkg/ui/internal/views/util/keymaps"
+	appconfig "github.com/rvdwijngaard/ecsx/pkg"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/messages"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/views/util/keymaps"
 )
 
 type detailsPane struct {

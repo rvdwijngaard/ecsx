@@ -11,11 +11,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	headed "github.com/ron/ecsx/pkg/ui/internal/components/headed_list"
-	regular "github.com/ron/ecsx/pkg/ui/internal/components/regular_list"
-	"github.com/ron/ecsx/pkg/ui/internal/messages"
-	commonstyles "github.com/ron/ecsx/pkg/ui/internal/styles"
-	u "github.com/ron/ecsx/pkg/util"
+	headed "github.com/rvdwijngaard/ecsx/pkg/ui/internal/components/headed_list"
+	regular "github.com/rvdwijngaard/ecsx/pkg/ui/internal/components/regular_list"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/messages"
+	commonstyles "github.com/rvdwijngaard/ecsx/pkg/ui/internal/styles"
+	u "github.com/rvdwijngaard/ecsx/pkg/util"
 )
 
 var queryDialogStyle = commonstyles.DialogStyle

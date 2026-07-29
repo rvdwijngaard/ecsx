@@ -3,7 +3,7 @@ package types
 import (
 	"time"
 
-	ecstypes "github.com/ron/ecsx/pkg/aws/ecs/types"
+	ecstypes "github.com/rvdwijngaard/ecsx/pkg/aws/ecs/types"
 )
 
 // ClusterItem represents a cluster formatted for UI display.

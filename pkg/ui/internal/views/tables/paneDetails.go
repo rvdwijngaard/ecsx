@@ -13,12 +13,12 @@ import (
 
 	dynamodbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
-	appconfig "github.com/ron/ecsx/pkg"
-	apitypes "github.com/ron/ecsx/pkg/ui/internal/adapters/dynamodb/types"
-	"github.com/ron/ecsx/pkg/ui/internal/messages"
-	"github.com/ron/ecsx/pkg/ui/internal/styles"
-	"github.com/ron/ecsx/pkg/ui/internal/views/util/keymaps"
-	u "github.com/ron/ecsx/pkg/util"
+	appconfig "github.com/rvdwijngaard/ecsx/pkg"
+	apitypes "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/dynamodb/types"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/messages"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/styles"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/views/util/keymaps"
+	u "github.com/rvdwijngaard/ecsx/pkg/util"
 )
 
 type detailsPane struct {

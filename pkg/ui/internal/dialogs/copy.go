@@ -11,9 +11,9 @@ import (
 
 	"github.com/atotto/clipboard"
 
-	regular "github.com/ron/ecsx/pkg/ui/internal/components/regular_list"
-	"github.com/ron/ecsx/pkg/ui/internal/messages"
-	commonstyles "github.com/ron/ecsx/pkg/ui/internal/styles"
+	regular "github.com/rvdwijngaard/ecsx/pkg/ui/internal/components/regular_list"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/messages"
+	commonstyles "github.com/rvdwijngaard/ecsx/pkg/ui/internal/styles"
 )
 
 type copyKeyMap struct {

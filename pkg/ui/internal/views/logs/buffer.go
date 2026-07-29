@@ -1,7 +1,7 @@
 package logsview
 
 import (
-	adaptertypes "github.com/ron/ecsx/pkg/ui/internal/adapters/cloudwatchlogs/types"
+	adaptertypes "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/cloudwatchlogs/types"
 )
 
 const defaultBufferCapacity = 5000

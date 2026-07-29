@@ -11,8 +11,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	tea "charm.land/bubbletea/v2"
 
-	cwladapter "github.com/ron/ecsx/pkg/ui/internal/adapters/cloudwatchlogs"
-	adaptertypes "github.com/ron/ecsx/pkg/ui/internal/adapters/cloudwatchlogs/types"
+	cwladapter "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/cloudwatchlogs"
+	adaptertypes "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/cloudwatchlogs/types"
 )
 
 // ExternalViewerFinishedMsg is sent when the external viewer process exits.

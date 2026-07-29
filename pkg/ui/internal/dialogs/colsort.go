@@ -10,9 +10,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/ron/ecsx/pkg/ui/internal/messages"
-	commonstyles "github.com/ron/ecsx/pkg/ui/internal/styles"
-	u "github.com/ron/ecsx/pkg/util"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/messages"
+	commonstyles "github.com/rvdwijngaard/ecsx/pkg/ui/internal/styles"
+	u "github.com/rvdwijngaard/ecsx/pkg/util"
 )
 
 var columnSortingDialogStyle = commonstyles.DialogStyle

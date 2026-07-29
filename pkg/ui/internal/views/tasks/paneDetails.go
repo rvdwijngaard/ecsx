@@ -10,10 +10,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	apitypes "github.com/ron/ecsx/pkg/ui/internal/adapters/ecs/types"
-	"github.com/ron/ecsx/pkg/ui/internal/messages"
-	"github.com/ron/ecsx/pkg/ui/internal/styles"
-	"github.com/ron/ecsx/pkg/ui/internal/views/util/keymaps"
+	apitypes "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/ecs/types"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/messages"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/styles"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/views/util/keymaps"
 )
 
 type detailsPane struct {

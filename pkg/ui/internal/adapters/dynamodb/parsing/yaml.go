@@ -6,8 +6,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/ron/ecsx/pkg/ui/internal/styles"
-	"github.com/ron/ecsx/pkg/util"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/styles"
+	"github.com/rvdwijngaard/ecsx/pkg/util"
 )
 
 const (

@@ -11,7 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	u "github.com/ron/ecsx/pkg/util"
+	u "github.com/rvdwijngaard/ecsx/pkg/util"
 )
 
 type Item struct {

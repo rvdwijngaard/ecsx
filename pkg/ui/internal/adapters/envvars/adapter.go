@@ -10,8 +10,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 
-	ecsconnector "github.com/ron/ecsx/pkg/aws/ecs"
-	ecstypes "github.com/ron/ecsx/pkg/aws/ecs/types"
+	ecsconnector "github.com/rvdwijngaard/ecsx/pkg/aws/ecs"
+	ecstypes "github.com/rvdwijngaard/ecsx/pkg/aws/ecs/types"
 )
 
 // Format represents an output format for environment variables.

@@ -7,8 +7,8 @@ package main
 // 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 // 	"github.com/spf13/cobra"
 //
-// 	pkgaws "github.com/ron/ecsx/pkg/aws"
-// 	ecsconnector "github.com/ron/ecsx/pkg/aws/ecs"
+// 	pkgaws "github.com/rvdwijngaard/ecsx/pkg/aws"
+// 	ecsconnector "github.com/rvdwijngaard/ecsx/pkg/aws/ecs"
 // )
 //
 // // completeWith creates a cobra completion function that fetches string results via the given fn.

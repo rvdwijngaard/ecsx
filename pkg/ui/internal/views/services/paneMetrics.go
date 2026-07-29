@@ -11,11 +11,11 @@ import (
 	"github.com/NimbleMarkets/ntcharts/v2/canvas/runes"
 	"github.com/NimbleMarkets/ntcharts/v2/linechart/timeserieslinechart"
 
-	appconfig "github.com/ron/ecsx/pkg"
-	cwadapter "github.com/ron/ecsx/pkg/ui/internal/adapters/cloudwatch"
-	cwtypes "github.com/ron/ecsx/pkg/ui/internal/adapters/cloudwatch/types"
-	"github.com/ron/ecsx/pkg/ui/internal/messages"
-	"github.com/ron/ecsx/pkg/ui/internal/styles"
+	appconfig "github.com/rvdwijngaard/ecsx/pkg"
+	cwadapter "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/cloudwatch"
+	cwtypes "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/cloudwatch/types"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/messages"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/styles"
 )
 
 const (

@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/exec"
 
-	ecsaws "github.com/ron/ecsx/internal/aws"
+	ecsaws "github.com/rvdwijngaard/ecsx/internal/aws"
 )
 
 // Connect starts an SSM session. It resolves the target EC2 instance from

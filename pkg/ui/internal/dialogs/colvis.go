@@ -6,9 +6,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	checkbox "github.com/ron/ecsx/pkg/ui/internal/components/checkbox_list"
-	"github.com/ron/ecsx/pkg/ui/internal/messages"
-	commonstyles "github.com/ron/ecsx/pkg/ui/internal/styles"
+	checkbox "github.com/rvdwijngaard/ecsx/pkg/ui/internal/components/checkbox_list"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/messages"
+	commonstyles "github.com/rvdwijngaard/ecsx/pkg/ui/internal/styles"
 )
 
 var columnsDialogStyle = commonstyles.DialogStyle

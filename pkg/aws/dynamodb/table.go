@@ -6,7 +6,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 
-	apitypes "github.com/ron/ecsx/pkg/aws/dynamodb/types"
+	apitypes "github.com/rvdwijngaard/ecsx/pkg/aws/dynamodb/types"
 )
 
 // TODO: add filters everywhere

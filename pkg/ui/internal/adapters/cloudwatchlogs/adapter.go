@@ -9,10 +9,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 
-	cwlconnector "github.com/ron/ecsx/pkg/aws/cloudwatchlogs"
-	cwltypes "github.com/ron/ecsx/pkg/aws/cloudwatchlogs/types"
-	ecsconnector "github.com/ron/ecsx/pkg/aws/ecs"
-	adaptertypes "github.com/ron/ecsx/pkg/ui/internal/adapters/cloudwatchlogs/types"
+	cwlconnector "github.com/rvdwijngaard/ecsx/pkg/aws/cloudwatchlogs"
+	cwltypes "github.com/rvdwijngaard/ecsx/pkg/aws/cloudwatchlogs/types"
+	ecsconnector "github.com/rvdwijngaard/ecsx/pkg/aws/ecs"
+	adaptertypes "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/cloudwatchlogs/types"
 )
 
 const defaultLookback = 5 * time.Minute

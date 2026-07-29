@@ -5,8 +5,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	ecsaws "github.com/ron/ecsx/internal/aws"
-	"github.com/ron/ecsx/internal/debug"
+	ecsaws "github.com/rvdwijngaard/ecsx/internal/aws"
+	"github.com/rvdwijngaard/ecsx/internal/debug"
 )
 
 func (m Model) loadClusters() tea.Cmd {

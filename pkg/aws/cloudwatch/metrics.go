@@ -9,7 +9,7 @@ import (
 	cw "github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 
-	apitypes "github.com/ron/ecsx/pkg/aws/cloudwatch/types"
+	apitypes "github.com/rvdwijngaard/ecsx/pkg/aws/cloudwatch/types"
 )
 
 type metricsClient interface {

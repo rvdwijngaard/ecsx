@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 
-	apitypes "github.com/ron/ecsx/pkg/aws/ecs/types"
+	apitypes "github.com/rvdwijngaard/ecsx/pkg/aws/ecs/types"
 )
 
 type serviceClient interface {

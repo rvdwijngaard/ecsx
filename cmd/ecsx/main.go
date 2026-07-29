@@ -8,9 +8,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 
-	appconfig "github.com/ron/ecsx/pkg"
-	"github.com/ron/ecsx/pkg/configfile"
-	"github.com/ron/ecsx/pkg/ui"
+	appconfig "github.com/rvdwijngaard/ecsx/pkg"
+	"github.com/rvdwijngaard/ecsx/pkg/configfile"
+	"github.com/rvdwijngaard/ecsx/pkg/ui"
 )
 
 var (

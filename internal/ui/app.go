@@ -14,8 +14,8 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	"charm.land/lipgloss/v2"
 
-	ecsaws "github.com/ron/ecsx/internal/aws"
-	"github.com/ron/ecsx/internal/logs"
+	ecsaws "github.com/rvdwijngaard/ecsx/internal/aws"
+	"github.com/rvdwijngaard/ecsx/internal/logs"
 )
 
 type Model struct {

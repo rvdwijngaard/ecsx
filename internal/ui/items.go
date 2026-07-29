@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	ecsaws "github.com/ron/ecsx/internal/aws"
+	ecsaws "github.com/rvdwijngaard/ecsx/internal/aws"
 )
 
 type viewLevel int

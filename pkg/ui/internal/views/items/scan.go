@@ -3,10 +3,10 @@ package itemselection
 import (
 	tea "charm.land/bubbletea/v2"
 
-	apitypes "github.com/ron/ecsx/pkg/ui/internal/adapters/dynamodb/types"
-	"github.com/ron/ecsx/pkg/ui/internal/messages"
-	"github.com/ron/ecsx/pkg/util"
-	u "github.com/ron/ecsx/pkg/util"
+	apitypes "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/dynamodb/types"
+	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/messages"
+	"github.com/rvdwijngaard/ecsx/pkg/util"
+	u "github.com/rvdwijngaard/ecsx/pkg/util"
 )
 
 // enableScanMode immediately returns when already enabled and forc == false. It

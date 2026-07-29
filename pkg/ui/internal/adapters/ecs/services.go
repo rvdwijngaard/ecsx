@@ -7,8 +7,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 
-	connector "github.com/ron/ecsx/pkg/aws/ecs"
-	apitypes "github.com/ron/ecsx/pkg/ui/internal/adapters/ecs/types"
+	connector "github.com/rvdwijngaard/ecsx/pkg/aws/ecs"
+	apitypes "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/ecs/types"
 )
 
 // ListServiceNames calls the ECS connector and returns service names for a cluster.
