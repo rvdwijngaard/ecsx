@@ -3,7 +3,6 @@ package appconfig
 import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 )
 
@@ -14,13 +13,10 @@ type Config struct {
 	Cluster string
 	Verbose bool
 
-	MaxTables        int
-	URL              *string
 	AvailableRegions []string
 	StarredRegions   []string
 	LogsViewer       string
 
-	Client               *dynamodb.Client
 	ECSClient            *ecs.Client
 	CloudWatchClient     *cloudwatch.Client
 	CloudWatchLogsClient *cloudwatchlogs.Client

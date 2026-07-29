@@ -22,11 +22,11 @@ open SSM sessions — without leaving your terminal.
 - 🗂 **Browse** clusters → services → tasks with fuzzy filtering
 - 📊 **Metrics** — CPU and memory sparklines per service
 - 📜 **Logs** — real-time CloudWatch log tailing with filter patterns
+- 🪵 **humanlog** — pipe logs through [`hl`](https://github.com/humanlogio/humanlog) for structured log formatting
 - 📝 **Editor** — open buffered logs in `$EDITOR` for search and analysis
 - ⚖️ **Scale** — update desired count on the fly
 - 🔄 **Deploy** — force new deployment to restart services
 - 🛑 **Stop** — stop individual tasks
-- 🔃 **Auto-refresh** — background refresh every 30s, toggle with `a`
 - 🔑 **Env vars** — inspect container environment, copy to clipboard
 - 🐚 **Exec** — shell into running containers via ECS ExecuteCommand
 - 🔌 **SSM** — connect to EC2 container instances
@@ -156,7 +156,6 @@ ecsx completion fish > ~/.config/fish/completions/ecsx.fish
 | `s`     | Scale service                   |
 | `x`     | Deploy / stop task / SSM session |
 | `r`     | Refresh                         |
-| `a`     | Toggle auto-refresh             |
 | `+` `-` | Toggle zoom                     |
 | `?`     | Help                            |
 | `q`     | Quit                            |
@@ -168,6 +167,34 @@ ecsx completion fish > ~/.config/fish/completions/ecsx.fish
 | `--profile` | `-p`  | AWS profile                  |
 | `--region`  | `-r`  | AWS region                   |
 | `--cluster` | `-c`  | ECS cluster (skip selection) |
+
+## Configuration
+
+ecsx reads its config from `~/.config/ecsx/config.yaml` (created on first run).
+
+```yaml
+default_region: eu-west-1
+starred_regions:
+  - eu-west-1
+  - us-east-1
+logs_viewer: "hl -L -F"
+```
+
+| Key               | Description                                                                 |
+| ----------------- | --------------------------------------------------------------------------- |
+| `default_region`  | Fallback region when `--region` and `AWS_REGION` are unset                  |
+| `default_profile` | Fallback AWS profile                                                        |
+| `starred_regions` | Pinned to the top of the region picker                                      |
+| `aws_regions`     | Override the built-in region list                                            |
+| `logs_viewer`     | External command to pipe logs through (e.g. `hl -L -F` for humanlog)        |
+
+### humanlog integration
+
+When `logs_viewer` is set, pressing `l` on a service suspends the TUI and pipes
+CloudWatch logs directly into the configured command. This is ideal for
+[`hl`](https://github.com/humanlogio/humanlog) which renders structured
+(JSON/logfmt) logs with colors, timestamps, and key highlighting. Press
+`Ctrl+C` to return to the TUI.
 
 ## IAM Permissions
 

@@ -567,7 +567,7 @@ func (m *serviceSelectionPane) escape() tea.Cmd {
 	switchView := func() tea.Msg {
 		return messages.SwitchView{
 			OldView: messages.Service_selection,
-			NewView: messages.Table_selection,
+			NewView: messages.Cluster_selection,
 		}
 	}
 	resetPreview := func() tea.Msg {

@@ -19,7 +19,6 @@ import (
 	"github.com/rvdwijngaard/ecsx/pkg/aws"
 	cwconnector "github.com/rvdwijngaard/ecsx/pkg/aws/cloudwatch"
 	cwlconnector "github.com/rvdwijngaard/ecsx/pkg/aws/cloudwatchlogs"
-	"github.com/rvdwijngaard/ecsx/pkg/aws/dynamodb"
 	ecsconnector "github.com/rvdwijngaard/ecsx/pkg/aws/ecs"
 	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/dialogs"
 	"github.com/rvdwijngaard/ecsx/pkg/ui/internal/messages"
@@ -27,7 +26,6 @@ import (
 	envvarsadapter "github.com/rvdwijngaard/ecsx/pkg/ui/internal/adapters/envvars"
 	commonstyles "github.com/rvdwijngaard/ecsx/pkg/ui/internal/styles"
 	clustersview "github.com/rvdwijngaard/ecsx/pkg/ui/internal/views/clusters"
-	itemsview "github.com/rvdwijngaard/ecsx/pkg/ui/internal/views/items"
 	logsview "github.com/rvdwijngaard/ecsx/pkg/ui/internal/views/logs"
 	envvarsview "github.com/rvdwijngaard/ecsx/pkg/ui/internal/views/envvars"
 	servicesview "github.com/rvdwijngaard/ecsx/pkg/ui/internal/views/services"
@@ -40,8 +38,7 @@ type View int
 type Dialog int
 
 const (
-	tables_view View = iota
-	items_view
+	clusters_view View = iota
 	services_view
 	tasks_view
 	logs_view
@@ -51,11 +48,6 @@ const (
 const (
 	help_dialog Dialog = iota
 	regions_dialog
-	columns_dialog
-	column_sorting_dialog
-	scan_param_dialog
-	query_param_dialog
-	copy_dialog
 	mfa_dialog
 	container_picker_dialog
 	logs_command_dialog
@@ -68,18 +60,9 @@ var regionBlock = lipgloss.NewStyle().
 	PaddingRight(1).
 	Height(1)
 
-var queryModeBlock = lipgloss.NewStyle().
-	Background(commonstyles.QueryModeBoxScanBg).
-	Align(lipgloss.Left, lipgloss.Top).
-	PaddingLeft(1).
-	PaddingRight(1).
-	Height(1)
-
 type Model struct {
 	// ActiveView determines tea.Msg forwarding
 	activeView View
-
-	QueryMode messages.ItemsQueryMode
 
 	KeyMap KeyMap
 
@@ -90,18 +73,13 @@ type Model struct {
 
 	// dialogs
 	dialogs struct {
-		open             bool
-		help             *dialogs.Help
-		region           *dialogs.Regions
-		columnVisibility *dialogs.Columns
-		columnSorting    *dialogs.ColumnSorting
-		scanParams       *dialogs.ScanDialog
-		queryParams      *dialogs.Queryialog
-		copy             *dialogs.CopyDialog
-		mfa              *dialogs.MFA
-		containerPicker  *dialogs.ContainerPicker
-		logsCommand      *dialogs.LogsCommandEditor
-		active           Dialog
+		open            bool
+		help            *dialogs.Help
+		region          *dialogs.Regions
+		mfa             *dialogs.MFA
+		containerPicker *dialogs.ContainerPicker
+		logsCommand     *dialogs.LogsCommandEditor
+		active          Dialog
 
 		notification []*dialogs.NotificationDialog
 	}
@@ -113,12 +91,11 @@ type Model struct {
 	config *appconfig.Config
 
 	// views
-	clusterSelection  *clustersview.ClusterSelection
-	itemselection     *itemsview.ItemSelection
-	serviceSelection  *servicesview.ServiceSelection
-	taskSelection     *tasksview.TaskSelection
-	logsView          *logsview.LogsView
-	envVarsView       *envvarsview.EnvVarsView
+	clusterSelection *clustersview.ClusterSelection
+	serviceSelection *servicesview.ServiceSelection
+	taskSelection    *tasksview.TaskSelection
+	logsView         *logsview.LogsView
+	envVarsView      *envvarsview.EnvVarsView
 
 	// help
 	Help help.Model
@@ -144,7 +121,7 @@ func NewModel(ctx context.Context, cfg appconfig.Config, opts ...Option) Model {
 		ctx:    ctx,
 		config: &cfg,
 
-		activeView: tables_view,
+		activeView: clusters_view,
 		Help:       help.New(),
 	}
 
@@ -178,7 +155,6 @@ func NewModel(ctx context.Context, cfg appconfig.Config, opts ...Option) Model {
 
 	{ // views
 		m.clusterSelection = clustersview.NewClusterSelectionView(ctx, &cfg, clustersview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
-		m.itemselection = itemsview.NewItemSelectionView(ctx, &cfg, itemsview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
 		m.serviceSelection = servicesview.NewServiceSelectionView(ctx, &cfg, servicesview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
 		m.taskSelection = tasksview.NewTaskSelectionView(ctx, &cfg, tasksview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
 		m.logsView = logsview.NewLogsView(&cfg, logsview.WithAdditionalKeys(keymaps.AdditionalKeys(inheritedKeys)))
@@ -187,17 +163,8 @@ func NewModel(ctx context.Context, cfg appconfig.Config, opts ...Option) Model {
 
 	{ // cluster view bound dialogs
 		clusterViewDialogKeys := m.clusterSelection.DialogKeyMaps()
-		m.dialogs.help = dialogs.NewHelp(m.clusterSelection, m.itemselection, m.serviceSelection, m.taskSelection, DialogCloseKeymapFrom(m.KeyMap.Help))
+		m.dialogs.help = dialogs.NewHelp(m.serviceSelection, m.taskSelection, DialogCloseKeymapFrom(m.KeyMap.Help))
 		m.dialogs.region = dialogs.NewRegionsDialog(m.config.AvailableRegions, m.config.StarredRegions, m.config.Region, DialogCloseKeymapFrom(clusterViewDialogKeys.RegionDialog))
-	}
-
-	{ // table view bound dialogs
-		itemViewDialogKeys := m.itemselection.DialogKeyMaps()
-		m.dialogs.columnVisibility = dialogs.NewColumnVisibilityDialog(DialogCloseKeymapFrom(itemViewDialogKeys.ColumnVisibility))
-		m.dialogs.columnSorting = dialogs.NewColumnSortingDialog(DialogCloseKeymapFrom(itemViewDialogKeys.ColumnSorting))
-		m.dialogs.scanParams = dialogs.NewScanDialog(DialogCloseKeymapFrom(itemViewDialogKeys.ScanParams))
-		m.dialogs.queryParams = dialogs.NewQueryDialog(DialogCloseKeymapFrom(itemViewDialogKeys.QueryParams))
-		m.dialogs.copy = dialogs.NewCopyDialog(DialogCloseKeymapFrom(itemViewDialogKeys.Copy))
 	}
 
 	return m
@@ -220,12 +187,10 @@ func (m Model) Init() tea.Cmd {
 	}
 
 	// set and reinitialise
-	m.config.Client = dynamodb.NewClient(cfg, m.config.URL)
 	m.config.ECSClient = ecsconnector.NewClient(cfg, u.IfNotNil(m.config.Profile, "")).ECS
 	m.config.CloudWatchLogsClient = cwlconnector.NewClient(cfg).Logs
 	m.config.CloudWatchClient = cwconnector.NewClient(cfg).CW
 	cmds = append(cmds, m.clusterSelection.Init())
-	cmds = append(cmds, m.itemselection.Init())
 	cmds = append(cmds, m.serviceSelection.Init())
 	cmds = append(cmds, m.taskSelection.Init())
 
@@ -258,16 +223,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m, cmd = m.ToggleHelpDialog()
 	case messages.ToggleRegions:
 		m, cmd = m.ToggleRegionsDialog()
-	case messages.ToggleColumnVisibility:
-		m, cmd = m.ToggleColumnsDialog()
-	case messages.ToggleColumnSorting:
-		m, cmd = m.ToggleColumnSortingDialog()
-	case messages.ToggleScanParameters:
-		m, cmd = m.ToggleScanParametersDialog()
-	case messages.ToggleQueryParameters:
-		m, cmd = m.ToggleQueryParametersDialog()
-	case messages.ToggleColumnCopy:
-		m, cmd = m.ToggleCopyDialog()
 	case messages.ToggleNotificationDialog:
 		m, cmd = m.ToggleNotificationDialog(msg)
 	case messages.NotificationExpired:
@@ -276,8 +231,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m, cmd = m.handleErrorTick(msg)
 	case messages.SwitchRegion:
 		m, cmd = m.switchRegion(msg.OldRegion, msg.NewRegion)
-	case messages.SwitchQueryMode:
-		m, cmd = m.SwitchQueryMode(msg)
 	case messages.OpenLogs:
 		if msg.Container != "" {
 			// Container selected — use external viewer or internal logs view
@@ -464,7 +417,6 @@ func (m Model) broadcast(msg tea.Msg) (Model, tea.Cmd) {
 
 	// views
 	cmds = append(cmds, m.clusterSelection.Update(msg))
-	cmds = append(cmds, m.itemselection.Update(msg))
 	cmds = append(cmds, m.serviceSelection.Update(msg))
 	cmds = append(cmds, m.taskSelection.Update(msg))
 	cmds = append(cmds, m.logsView.Update(msg))
@@ -473,11 +425,6 @@ func (m Model) broadcast(msg tea.Msg) (Model, tea.Cmd) {
 	// dialogs
 	cmds = append(cmds, m.dialogs.help.Update(msg))
 	cmds = append(cmds, m.dialogs.region.Update(msg))
-	cmds = append(cmds, m.dialogs.columnVisibility.Update(msg))
-	cmds = append(cmds, m.dialogs.columnSorting.Update(msg))
-	cmds = append(cmds, m.dialogs.scanParams.Update(msg))
-	cmds = append(cmds, m.dialogs.queryParams.Update(msg))
-	cmds = append(cmds, m.dialogs.copy.Update(msg))
 	cmds = append(cmds, m.dialogs.mfa.Update(msg))
 
 	return m, tea.Batch(cmds...)
@@ -493,16 +440,6 @@ func (m Model) routeToActiveOnly(msg tea.Msg) (Model, tea.Cmd) {
 			return m, m.dialogs.help.Update(msg)
 		case regions_dialog:
 			return m, m.dialogs.region.Update(msg)
-		case columns_dialog:
-			return m, m.dialogs.columnVisibility.Update(msg)
-		case column_sorting_dialog:
-			return m, m.dialogs.columnSorting.Update(msg)
-		case scan_param_dialog:
-			return m, m.dialogs.scanParams.Update(msg)
-		case query_param_dialog:
-			return m, m.dialogs.queryParams.Update(msg)
-		case copy_dialog:
-			return m, m.dialogs.copy.Update(msg)
 		case mfa_dialog:
 			return m, m.dialogs.mfa.Update(msg)
 		case container_picker_dialog:
@@ -513,10 +450,8 @@ func (m Model) routeToActiveOnly(msg tea.Msg) (Model, tea.Cmd) {
 	}
 
 	switch m.activeView {
-	case tables_view:
+	case clusters_view:
 		return m, m.clusterSelection.Update(msg)
-	case items_view:
-		return m, m.itemselection.Update(msg)
 	case services_view:
 		return m, m.serviceSelection.Update(msg)
 	case tasks_view:
@@ -529,17 +464,6 @@ func (m Model) routeToActiveOnly(msg tea.Msg) (Model, tea.Cmd) {
 		log.Fatalf("could not identify active view '%d'", int(m.activeView))
 	}
 
-	return m, nil
-}
-
-func (m Model) SwitchQueryMode(msg messages.SwitchQueryMode) (Model, tea.Cmd) {
-	m.QueryMode = msg.NewMode
-	switch m.QueryMode {
-	case messages.ScanMode:
-		queryModeBlock = queryModeBlock.Background(commonstyles.QueryModeBoxScanBg)
-	case messages.QueryMode:
-		queryModeBlock = queryModeBlock.Background(commonstyles.QueryModeBoxQeuryBg)
-	}
 	return m, nil
 }
 
@@ -624,10 +548,8 @@ func (m Model) applySize(height, width int) tea.Model {
 
 func (m Model) handleSwitchView(msg messages.SwitchView) (Model, tea.Cmd) {
 	switch msg.NewView {
-	case messages.Table_selection:
-		m.activeView = tables_view
-	case messages.Item_selection:
-		m.activeView = items_view
+	case messages.Cluster_selection:
+		m.activeView = clusters_view
 	case messages.Service_selection:
 		m.activeView = services_view
 	case messages.Task_selection:
@@ -687,63 +609,6 @@ func (m Model) ToggleRegionsDialog() (Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) ToggleColumnsDialog() (Model, tea.Cmd) {
-	if m.dialogs.open && m.dialogs.active != columns_dialog {
-		return m, nil
-	}
-	m.dialogs.open = !m.dialogs.open
-	if m.dialogs.open {
-		m.dialogs.active = columns_dialog
-	}
-	return m, nil
-}
-
-func (m Model) ToggleColumnSortingDialog() (Model, tea.Cmd) {
-	if m.dialogs.open && m.dialogs.active != column_sorting_dialog {
-		return m, nil
-	}
-	m.dialogs.open = !m.dialogs.open
-	if m.dialogs.open {
-		m.dialogs.active = column_sorting_dialog
-	}
-	return m, nil
-}
-
-func (m Model) ToggleScanParametersDialog() (Model, tea.Cmd) {
-	if m.dialogs.open && m.dialogs.active != scan_param_dialog {
-		return m, nil
-	}
-	m.dialogs.open = !m.dialogs.open
-	if m.dialogs.open {
-		m.dialogs.active = scan_param_dialog
-	}
-	return m, nil
-}
-
-func (m Model) ToggleQueryParametersDialog() (Model, tea.Cmd) {
-	if m.dialogs.open && m.dialogs.active != query_param_dialog {
-		return m, nil
-	}
-	m.dialogs.open = !m.dialogs.open
-	if m.dialogs.open {
-		m.dialogs.active = query_param_dialog
-	}
-	return m, nil
-}
-
-func (m Model) ToggleCopyDialog() (Model, tea.Cmd) {
-	if m.dialogs.open && m.dialogs.active != copy_dialog {
-		return m, nil
-	}
-	m.dialogs.open = !m.dialogs.open
-	if m.dialogs.open {
-		m.dialogs.active = copy_dialog
-	}
-	return m, nil
-}
-
-// TODO: now assuming no dialog can be open prior to MFA call; ensure existing
-// dialogs are closed first!
 func (m Model) OpenMFADialog() (Model, tea.Cmd) {
 	m.dialogs.open = true
 	m.dialogs.active = mfa_dialog
@@ -765,12 +630,9 @@ func (m Model) View() tea.View {
 	var page string
 	var help string
 	switch m.activeView {
-	case tables_view:
+	case clusters_view:
 		page = m.clusterSelection.View()
 		help = m.Help.ShortHelpView(m.clusterSelection.ShortHelp())
-	case items_view:
-		page = m.itemselection.View()
-		help = m.Help.ShortHelpView(m.itemselection.ShortHelp())
 	case services_view:
 		page = m.serviceSelection.View()
 		help = m.Help.ShortHelpView(m.serviceSelection.ShortHelp())
@@ -787,9 +649,7 @@ func (m Model) View() tea.View {
 
 	// assemble gutter
 	region := regionBlock.Render(m.config.Region)
-	queryMode := u.Ternary("QUERY", "SCAN", m.QueryMode == messages.QueryMode)
-	query := u.Ternary(fmt.Sprintf(" %s", queryModeBlock.Render(queryMode)), "", m.activeView == items_view)
-	gutter := lipgloss.JoinHorizontal(lipgloss.Left, region, query, " ", help)
+	gutter := lipgloss.JoinHorizontal(lipgloss.Left, region, " ", help)
 
 	page = lipgloss.JoinVertical(lipgloss.Top, page, gutter)
 
@@ -804,16 +664,6 @@ func (m Model) View() tea.View {
 			dialog = m.dialogs.help
 		case regions_dialog:
 			dialog = m.dialogs.region
-		case columns_dialog:
-			dialog = m.dialogs.columnVisibility
-		case column_sorting_dialog:
-			dialog = m.dialogs.columnSorting
-		case scan_param_dialog:
-			dialog = m.dialogs.scanParams
-		case query_param_dialog:
-			dialog = m.dialogs.queryParams
-		case copy_dialog:
-			dialog = m.dialogs.copy
 		case mfa_dialog:
 			dialog = m.dialogs.mfa
 		case container_picker_dialog:

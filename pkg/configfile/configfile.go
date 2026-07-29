@@ -64,11 +64,6 @@ type ConfigFile struct {
 	// LogsViewer is an optional external command (e.g. "hl -L -F") used to
 	// format log lines before displaying them in the logs view.
 	LogsViewer string `yaml:"logs_viewer"`
-
-	// tables will be paged in automatically on boot. To prevent excessive
-	// calls, we specify a limit on how many pages (size of 100) can be
-	// retrieved. This parameter specifies the number of tables, not pages.
-	MaxTables int `yaml:"max_tables"`
 }
 
 func defaultConfig() ConfigFile {
@@ -79,7 +74,6 @@ func defaultConfig() ConfigFile {
 		LastUsedRegion:      "",
 		DefaultToLastRegion: false,
 		DefaultProfile:      "",
-		MaxTables:           1000,
 	}
 }
 
@@ -115,9 +109,6 @@ func (m *ConfigManager) LoadConfig(create bool) (ConfigFile, error) {
 		return dflt, fmt.Errorf("failed to unmarshal config file; %w", err)
 	}
 
-	if cfg.MaxTables == 0 {
-		cfg.MaxTables = dflt.MaxTables
-	}
 	return cfg, nil
 }
 

@@ -45,7 +45,7 @@ func init() {
 func main() {
 	root := &cobra.Command{
 		Use:          "ecsx",
-		Short:        "ECS terminal UI and log tailer",
+		Short:        "Terminal UI for Amazon ECS",
 		Version:      version,
 		SilenceUsage: true,
 		RunE:         runApplication,
@@ -100,7 +100,6 @@ func runApplication(cmd *cobra.Command, args []string) error {
 		Verbose:          verbose,
 		AvailableRegions: cfgf.AWSRegions,
 		StarredRegions:   cfgf.StarredRegions,
-		MaxTables:        cfgf.MaxTables,
 		LogsViewer:       cfgf.LogsViewer,
 
 		MFACredentialCB: mfaCB,

@@ -101,7 +101,7 @@ func (m *ClusterSelection) Update(msg tea.Msg) tea.Cmd {
 		m.window.height = msg.Height
 		m.window.width = msg.Width
 		m.applySize()
-	case messages.ZoomToggleTableSelectionPane, messages.ZoomToggleTableDetailsPane:
+	case messages.ZoomToggleClusterSelectionPane, messages.ZoomToggleClusterDetailsPane:
 		cmd = m.handleZoom(msg)
 	}
 
@@ -138,12 +138,12 @@ func (m *ClusterSelection) routeToFocusedOnly(msg tea.Msg) tea.Cmd {
 
 func (m *ClusterSelection) handleZoom(msg tea.Msg) tea.Cmd {
 	switch msg.(type) {
-	case messages.ZoomToggleTableSelectionPane:
+	case messages.ZoomToggleClusterSelectionPane:
 		m.zoomEnabled = !m.zoomEnabled
 		m.zoomtarget = clusterPaneID
 		m.focused = clusterPaneID
 		m.KeyMap.MoveFocus.SetEnabled(!m.KeyMap.MoveFocus.Enabled())
-	case messages.ZoomToggleTableDetailsPane:
+	case messages.ZoomToggleClusterDetailsPane:
 		m.zoomEnabled = !m.zoomEnabled
 		m.zoomtarget = detailsPaneID
 		m.focused = detailsPaneID

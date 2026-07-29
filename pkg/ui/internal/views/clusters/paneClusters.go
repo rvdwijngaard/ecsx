@@ -418,7 +418,7 @@ func (m *clusterSelectionPane) MaybePreviewCluster(force bool) tea.Cmd {
 
 func (m *clusterSelectionPane) Zoom() tea.Cmd {
 	return func() tea.Msg {
-		return messages.ZoomToggleTableSelectionPane{}
+		return messages.ZoomToggleClusterSelectionPane{}
 	}
 }
 
@@ -448,7 +448,7 @@ func (m *clusterSelectionPane) selectCluster() tea.Cmd {
 
 	switchView := func() tea.Msg {
 		return messages.SwitchView{
-			OldView: messages.Table_selection,
+			OldView: messages.Cluster_selection,
 			NewView: messages.Service_selection,
 		}
 	}

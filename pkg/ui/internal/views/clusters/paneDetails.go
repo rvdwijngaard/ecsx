@@ -131,7 +131,7 @@ func renderClusterDetails(details *apitypes.ClusterItem, s detailsStyles) string
 
 func (m *detailsPane) Zoom() tea.Cmd {
 	return func() tea.Msg {
-		return messages.ZoomToggleTableDetailsPane{}
+		return messages.ZoomToggleClusterDetailsPane{}
 	}
 }
 
